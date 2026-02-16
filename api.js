@@ -1,6 +1,8 @@
 const SOLAR_API_KEY = 'KJ7ARUDREGXJM57D2YVEDY1T8KZ6LISU';
 const SITE_ID = '4262188';
-const BASE_URL = '/solaredge';
+// Check if we are in development mode (localhost) to use the proxy
+const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const BASE_URL = IS_DEV ? '/solaredge' : 'https://monitoringapi.solaredge.com';
 
 const SolarAPI = {
     async fetch(endpoint, params = {}) {
@@ -93,3 +95,5 @@ const SolarAPI = {
         });
     }
 };
+
+window.SolarAPI = SolarAPI;

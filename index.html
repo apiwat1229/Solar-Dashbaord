@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SolarEdge Dashboard | Premium Monitoring</title>
+    <title>Solar Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,26 +12,57 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <link rel="icon" href="data:,">
 </head>
 <body class="light-theme">
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading Solar Dashboard...</div>
+    </div>
+
     <div id="app" v-cloak>
         <!-- Navbar -->
         <header class="main-header">
             <div class="header-left">
-                <div class="logo">
-                    <div class="logo-icon">☀️</div>
+                <div class="logo-area">
+                    <i data-lucide="sun" class="logo-icon spin-slow"></i>
                     <div class="logo-text">
-                        <span class="brand-main">SOLAR</span>
-                        <span class="brand-sub">DASHBOARD</span>
+                        <span class="brand">SOLAR</span>
+                        <span class="model">DASHBOARD</span>
+                        <span class="location">Y.T Rubber</span>
                     </div>
                 </div>
             </div>
             
-            <div class="user-profile">
-                <div class="status-badge" :class="connectionStatus">
-                    <span class="status-dot"></span>
-                    Update: {{ lastUpdateTime }}
+            <div class="header-center">
+                <!-- Center content if needed -->
+            </div>
+
+            <div class="header-right">
+                <div class="header-info-pill">
+                    <div class="status-dot" :class="{ 'active': connectionStatus === 'online', 'blink': connectionStatus === 'online' }"></div>
+                    <span>Update: {{ lastUpdateTime }}</span>
+                </div>
+                
+                <div class="header-info-pill navbar-date-picker">
+                    <i data-lucide="calendar" class="header-icon"></i>
+                    <span>{{ formattedSelectedDate }}</span>
+                    <input type="text" class="hidden-date-input">
+                </div>
+
+                <div class="window-controls">
+                    <button id="btn-minimize" class="win-btn" title="Minimize">
+                        <i data-lucide="minus"></i>
+                    </button>
+                    <button id="btn-maximize" class="win-btn" title="Maximize">
+                        <i data-lucide="maximize"></i>
+                    </button>
+                    <button id="btn-close" class="win-btn close-btn" title="Close">
+                        <i data-lucide="x"></i>
+                    </button>
                 </div>
             </div>
         </header>
@@ -50,14 +81,11 @@
                             <div class="title-group">
                                 <h3>Daily Power and Energy</h3>
                                 <div class="chart-legend">
-                                    <div class="legend-item"><span class="dot consumption"></span> CONSUMPTION</div>
-                                    <div class="legend-item"><span class="dot solar"></span> FROM SOLAR CELL</div>
-                                    <div class="legend-item"><span class="dot pea"></span> FROM PEA</div>
+                                    <div class="legend-item"><span class="dot" style="background-color: #f2726f;"></span> CONSUMPTION</div>
+                                    <div class="legend-item"><span class="dot" style="background-color: #5fbcd3;"></span> FROM SOLAR CELL</div>
                                 </div>
-                                <div class="date-selector">
-                                    <input type="date" v-model="selectedDate" class="mini-date-picker">
-                                    <button class="filter-btn" @click="loadDashboardData">Filter</button>
-                                </div>
+                                <!-- Date Selector Removed -->
+
                             </div>
                         </div>
                         <div class="chart-wrapper">
@@ -74,55 +102,66 @@
                         </div>
                         <div class="flow-container">
                             <svg class="flow-svg" viewBox="0 0 400 360">
-                                <!-- Paths -->
-                                <path id="solar-to-inverter" d="M 75 80 L 200 80 L 200 150" class="flow-path" />
-                                <path id="grid-to-inverter" d="M 325 80 L 200 80 L 200 150" class="flow-path" />
-                                <path id="inverter-to-load" d="M 200 210 L 200 315" class="flow-path" />
+                                <!-- Paths (Moved up by 50 units) -->
+                                <path id="solar-to-inverter" d="M 75 30 L 200 30 L 200 100" class="flow-path" />
+                                <path id="grid-to-inverter" d="M 325 30 L 200 30 L 200 100" class="flow-path" />
+                                <path id="inverter-to-load" d="M 200 160 L 200 260" class="flow-path" />
 
                                 <!-- Flowing Dots (Animated via dynamic duration from app.js) -->
                                 <circle r="3" class="flow-dot solar" v-if="powerFlow.pv?.currentPower > 0">
-                                    <animateMotion :dur="flowSpeeds.solar" repeatCount="indefinite" path="M 75 80 L 200 80 L 200 160" />
+                                    <animateMotion :dur="flowSpeeds.solar" repeatCount="indefinite" path="M 75 30 L 200 30 L 200 110" />
                                 </circle>
                                 <circle r="3" class="flow-dot grid" v-if="powerFlow.grid?.currentPower > 0">
-                                    <animateMotion :dur="flowSpeeds.grid" repeatCount="indefinite" path="M 325 80 L 200 80 L 200 160" />
+                                    <animateMotion :dur="flowSpeeds.grid" repeatCount="indefinite" path="M 325 30 L 200 30 L 200 110" />
                                 </circle>
                                 <circle r="3" class="flow-dot load" v-if="powerFlow.load?.currentPower > 0">
-                                    <animateMotion :dur="flowSpeeds.load" repeatCount="indefinite" path="M 200 210 L 200 325" />
+                                    <animateMotion :dur="flowSpeeds.load" repeatCount="indefinite" path="M 200 160 L 200 270" />
                                 </circle>
                             </svg>
 
-                            <!-- Nodes -->
-                            <div class="node production" style="top: 15%; left: 10%;">
-                                <div class="node-icon"><i data-lucide="sun"></i></div>
+                            <!-- Nodes (Moved up) -->
+                            <div class="node production" style="top: 1%; left: 10%;">
+                                <div class="node-icon solar"><i data-lucide="sun"></i></div>
                                 <div class="node-label">FROM SOLAR CELL</div>
+
                                 <div class="node-v solar">{{ formatPower(powerFlow.pv?.currentPower) }}</div>
                             </div>
-                            <div class="node grid" style="top: 15%; right: 10%;">
-                                <div class="node-icon"><i data-lucide="zap"></i></div>
+                            <div class="node grid" style="top: 1%; right: 10%;">
+                                <div class="node-icon grid"><i data-lucide="zap"></i></div>
                                 <div class="node-label">FROM PEA</div>
+
                                 <div class="node-v grid">{{ formatPower(powerFlow.grid?.currentPower) }}</div>
                             </div>
-                            <div class="node inverter" style="top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                            <div class="node inverter" style="top: 36%; left: 50%; transform: translate(-50%, -50%);">
                                 <div class="node-icon main glow"><i data-lucide="cpu"></i></div>
                             </div>
                             <div class="node load" style="bottom: 5%; left: 50%; transform: translateX(-50%);">
-                                <div class="node-icon"><i data-lucide="home"></i></div>
+                                <div class="node-icon load"><i data-lucide="home"></i></div>
                                 <div class="node-label">CONSUMPTION</div>
+
                                 <div class="node-v load">{{ formatPower(powerFlow.load?.currentPower) }}</div>
                             </div>
                         </div>
                         <div class="visual-footer-stats">
                             <div class="footer-stat">
-                                <span class="label">ENERGY TODAY</span>
-                                <span class="value">{{ formatEnergy(overview.lastDayData?.energy) }}</span>
+                                <div class="stat-content">
+                                    <span class="label">Energy Today</span>
+                                    <span class="value">{{ formatEnergy(overview.lastDayData?.energy) }}</span>
+                                </div>
                             </div>
+                            <div class="stat-divider"></div>
                             <div class="footer-stat">
-                                <span class="label">ENERGY THIS MONTH</span>
-                                <span class="value">{{ formatEnergyMWh(overview.lastMonthData?.energy) }}</span>
+                                <div class="stat-content">
+                                    <span class="label">This Month</span>
+                                    <span class="value">{{ formatEnergyMWh(overview.lastMonthData?.energy) }}</span>
+                                </div>
                             </div>
+                            <div class="stat-divider"></div>
                             <div class="footer-stat">
-                                <span class="label">LIFETIME ENERGY</span>
-                                <span class="value">{{ formatEnergyMWh(overview.lifeTimeData?.energy) }}</span>
+                                <div class="stat-content">
+                                    <span class="label">Lifetime</span>
+                                    <span class="value">{{ formatEnergyMWh(overview.lifeTimeData?.energy) }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -133,7 +172,13 @@
                 <div class="dashboard-bottom-row">
                     <div class="chart-card energy-chart">
                         <div class="chart-header">
-                            <h3>30-Day Energy Trend (kWh)</h3>
+                            <div class="title-group">
+                                <h3>30-Day Energy Trend (kWh)</h3>
+                                <div class="chart-legend small">
+                                    <div class="legend-item"><span class="dot solar"></span> Solar</div>
+                                    <div class="legend-item"><span class="dot pea"></span> PEA</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="chart-wrapper">
                             <canvas id="dailyBarChart"></canvas>
@@ -141,7 +186,13 @@
                     </div>
                     <div class="chart-card energy-chart">
                         <div class="chart-header">
-                            <h3>12-Month Energy Trend (MWh)</h3>
+                            <div class="title-group">
+                                <h3>12-Month Energy Trend (MWh)</h3>
+                                <div class="chart-legend small">
+                                    <div class="legend-item"><span class="dot solar"></span> Solar</div>
+                                    <div class="legend-item"><span class="dot pea"></span> PEA</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="chart-wrapper">
                             <canvas id="monthlyBarChart"></canvas>
@@ -156,7 +207,7 @@
         </main>
     </div>
 
-    <script src="api.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="api.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -22,6 +22,20 @@ createApp({
         };
         const lastUpdateTime = ref(formatTimestamp());
 
+        const formattedSelectedDate = computed(() => {
+            if (!selectedDate.value) return '';
+            const date = new Date(selectedDate.value);
+            const day = String(date.getDate()).padStart(2, '0');
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = months[date.getMonth()];
+            const year = date.getFullYear();
+            return `${day}-${month}-${year}`;
+        });
+
+        watch(selectedDate, () => {
+            loadDashboardData();
+        });
+
 
         const connectionStatusText = computed(() => {
             return connectionStatus.value === 'online' ? 'Online' : 'Offline';
@@ -58,16 +72,17 @@ createApp({
         };
 
         const formatEnergy = (val) => {
-            if (val === undefined || val === null) return '0 KWh';
+            if (val === undefined || val === null) return '0.0 KWh';
             let kwh = val / 1000;
-            return `${Math.round(kwh).toLocaleString()} KWh`;
+            return `${kwh.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KWh`;
         };
 
         const formatEnergyMWh = (val) => {
-            if (val === undefined || val === null) return '0 MWh';
+            if (val === undefined || val === null) return '0.0 MWh';
             let mwh = val / 1000000;
-            return `${mwh.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 3 })} MWh`;
+            return `${mwh.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MWh`;
         };
+
 
         const formatCo2 = (val) => {
             if (!val) return '0 kg';
@@ -88,13 +103,12 @@ createApp({
                 const startTime = `${today} 00:00:00`;
                 const endTime = `${today} 23:59:59`;
 
-                const [ov, flow, env, inv, pDetails] = await Promise.all([
-                    SolarAPI.getOverview(),
-                    SolarAPI.getPowerFlow(),
-                    SolarAPI.getEnvBenefits(),
-                    SolarAPI.getInventory(),
-                    SolarAPI.getPowerDetails(startTime, endTime)
-                ]);
+                // Sequence calls to avoid Rate Limit (429)
+                const ov = await SolarAPI.getOverview();
+                const flow = await SolarAPI.getPowerFlow();
+                const env = await SolarAPI.getEnvBenefits();
+                const inv = await SolarAPI.getInventory();
+                const pDetails = await SolarAPI.getPowerDetails(startTime, endTime);
 
                 overview.value = ov.overview || {};
                 const rawFlow = flow.siteCurrentPowerFlow || {};
@@ -144,49 +158,72 @@ createApp({
                 const consumptionValues = getMeterValues('Consumption');
                 const purchasedValues = getMeterValues('Purchased');
 
-                const labels = productionValues.map(p => {
-                    const d = new Date(p.date.replace(' ', 'T'));
-                    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-                });
+                // Generate 24-hour labels (00:00 to 23:55, every 5 mins to match typically granular data)
+                const timeLabels = [];
+                for (let h = 0; h < 24; h++) {
+                    for (let m = 0; m < 60; m += 15) { // 15-minute intervals for cleaner chart
+                        timeLabels.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                    }
+                }
+                timeLabels.push('24:00'); // Explicitly add end of day
 
-                const solarData = productionValues.map(p => (p.value || 0) / 1000);
-                const consumptionData = consumptionValues.map(p => (p.value || 0) / 1000);
-                const purchasedData = purchasedValues.map(p => (p.value || 0) / 1000);
+                // Helper to map data to time labels
+                const mapDataToLabels = (values) => {
+                    const dataMap = {};
+                    values.forEach(v => {
+                        const d = new Date(v.date.replace(' ', 'T'));
+                        // Round key to nearest 15 min
+                        const h = d.getHours();
+                        const m = Math.floor(d.getMinutes() / 15) * 15;
+                        const key = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                        dataMap[key] = (v.value || 0) / 1000;
+                    });
+
+                    // Fill standard labels, use 0 if no data point matches (or null for gaps if preferred)
+                    return timeLabels.map(label => dataMap[label] !== undefined ? dataMap[label] : 0);
+                };
+
+                const solarData = mapDataToLabels(productionValues);
+                const consumptionData = mapDataToLabels(consumptionValues);
+                const purchasedData = mapDataToLabels(purchasedValues);
 
                 areaChart = new Chart(areaCtx, {
                     type: 'line',
                     data: {
-                        labels: labels,
+                        labels: timeLabels,
                         datasets: [
                             {
                                 label: 'Solar Production',
                                 data: solarData,
-                                borderColor: '#5fbcd3',
-                                backgroundColor: 'rgba(95, 188, 211, 0.4)',
+                                borderColor: '#5fbcd3', // Blue
+                                backgroundColor: '#5fbcd3', // Solid Blue
                                 fill: true,
                                 tension: 0.4,
                                 pointRadius: 0,
-                                borderWidth: 1
-                            },
-                            {
-                                label: 'Purchased (PEA)',
-                                data: purchasedData,
-                                borderColor: '#f2726f',
-                                backgroundColor: 'rgba(242, 114, 111, 0.4)',
-                                fill: true,
-                                tension: 0.4,
-                                pointRadius: 0,
-                                borderWidth: 1
+                                borderWidth: 0, // Remove border for solid area look
+                                order: 1
                             },
                             {
                                 label: 'Consumption',
                                 data: consumptionData,
-                                borderColor: '#ffbb00',
-                                backgroundColor: 'rgba(255, 187, 0, 0.4)',
+                                borderColor: '#f2726f', // Red
+                                backgroundColor: '#f2726f', // Solid Red
                                 fill: true,
                                 tension: 0.4,
                                 pointRadius: 0,
-                                borderWidth: 1
+                                borderWidth: 0,
+                                order: 2
+                            },
+                            {
+                                label: 'Purchased (PEA)',
+                                data: purchasedData,
+                                borderColor: '#22c55e', // Green
+                                backgroundColor: '#22c55e', // Solid Green
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 0,
+                                borderWidth: 0,
+                                order: 3
                             }
                         ]
                     },
@@ -209,7 +246,15 @@ createApp({
                                 ticks: {
                                     color: '#94a3b8',
                                     font: { family: 'Outfit', size: 10 },
-                                    maxTicksLimit: 12
+                                    maxTicksLimit: 13,
+                                    autoSkip: false,
+                                    callback: function (val, index) {
+                                        const label = this.getLabelForValue(val);
+                                        if (index === 0) return label;
+                                        if (index === this.chart.data.labels.length - 1) return label;
+                                        if (index % 8 === 0) return label;
+                                        return null;
+                                    }
                                 }
                             },
                             y: {
@@ -237,9 +282,9 @@ createApp({
             if (dailyBarCtx) {
                 if (dailyBarChart) dailyBarChart.destroy();
 
-                // Generate 30 days of labels
                 const labels = [];
-                const now = new Date();
+                const now = selectedDate.value ? new Date(selectedDate.value) : new Date();
+
                 for (let i = 29; i >= 0; i--) {
                     const d = new Date(now);
                     d.setDate(now.getDate() - i);
@@ -254,13 +299,17 @@ createApp({
                             {
                                 label: 'Solar',
                                 data: Array.from({ length: 30 }, () => Math.random() * 80 + 40),
-                                backgroundColor: '#5fbcd3',
+                                backgroundColor: '#5fbcd3', // Solid Blue
+                                borderColor: '#5fbcd3',
+                                borderWidth: 0,
                                 borderRadius: 4
                             },
                             {
                                 label: 'PEA',
                                 data: Array.from({ length: 30 }, () => Math.random() * 250 + 100),
-                                backgroundColor: '#f2726f',
+                                backgroundColor: '#22c55e', // Solid Green
+                                borderColor: '#22c55e',
+                                borderWidth: 0,
                                 borderRadius: 4
                             }
                         ]
@@ -277,7 +326,7 @@ createApp({
                                 }
                             },
                             datalabels: {
-                                color: '#fff',
+                                color: '#1e293b',
                                 font: { weight: 'bold', size: 9 },
                                 textAlign: 'center',
                                 formatter: (val, ctx) => {
@@ -340,13 +389,17 @@ createApp({
                             {
                                 label: 'Solar',
                                 data: months.map(() => Math.random() * 0.4 + 0.1),
-                                backgroundColor: '#5fbcd3',
+                                backgroundColor: '#5fbcd3', // Solid Blue
+                                borderColor: '#5fbcd3',
+                                borderWidth: 0,
                                 borderRadius: 4
                             },
                             {
                                 label: 'PEA',
                                 data: months.map(() => Math.random() * 0.6 + 0.2),
-                                backgroundColor: '#f2726f',
+                                backgroundColor: '#22c55e', // Solid Green
+                                borderColor: '#22c55e',
+                                borderWidth: 0,
                                 borderRadius: 4
                             }
                         ]
@@ -367,7 +420,7 @@ createApp({
                                 }
                             },
                             datalabels: {
-                                color: '#fff',
+                                color: '#1e293b',
                                 font: { weight: 'bold', size: 9 },
                                 textAlign: 'center',
                                 formatter: (val, ctx) => {
@@ -435,11 +488,83 @@ createApp({
             if (typeof lucide !== 'undefined') lucide.createIcons();
         });
 
-        onMounted(() => {
-            loadDashboardData();
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-            setInterval(loadDashboardData, 5 * 60 * 1000);
+        // Watch selectedDate to reload data
+        watch(selectedDate, (newDate, oldDate) => {
+            if (newDate !== oldDate) {
+                loadDashboardData();
+            }
         });
+
+        // Window Controls
+        const setupWindowControls = () => {
+            // Check if electronAPI exists (it won't in standard browser)
+            if (window.electronAPI) {
+                const minimizeBtn = document.getElementById('btn-minimize');
+                const maximizeBtn = document.getElementById('btn-maximize');
+                const closeBtn = document.getElementById('btn-close');
+
+                if (minimizeBtn) minimizeBtn.addEventListener('click', () => window.electronAPI.minimize());
+                if (maximizeBtn) maximizeBtn.addEventListener('click', () => window.electronAPI.toggleMaximize());
+                if (closeBtn) closeBtn.addEventListener('click', () => window.electronAPI.close());
+            } else {
+                console.log("Electron API not found. Window controls disabled.");
+            }
+        };
+
+        onMounted(() => {
+            // Setup window controls
+            setupWindowControls();
+
+            // Initial data load
+            loadDashboardData().then(() => {
+                // Hide loading screen after data is ready
+                const loader = document.getElementById('loading-screen');
+                if (loader) {
+                    setTimeout(() => {
+                        loader.classList.add('hidden');
+                    }, 500);
+                }
+            });
+
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+
+            // Initialize Flatpickr
+            flatpickr(".hidden-date-input", {
+                dateFormat: "Y-m-d",
+                defaultDate: selectedDate.value,
+                disableMobile: true, // Force custom picker on mobile
+                onChange: (selectedDates, dateStr) => {
+                    selectedDate.value = dateStr;
+                }
+            });
+
+            setInterval(loadDashboardData, 5 * 60 * 1000);
+
+            // Handle Fullscreen Exit Layout Fix
+            document.addEventListener('fullscreenchange', () => {
+                // Force a resize event to update charts and layout
+                window.dispatchEvent(new Event('resize'));
+                // Optional: Re-init if drastic layout changes occur
+                setTimeout(() => {
+                    initDashboardCharts();
+                }, 100);
+            });
+        });
+
+
+        const toggleFullScreen = () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(e => {
+                    console.error(`Error attempting to enable full-screen mode: ${e.message} (${e.name})`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        };
 
         return {
             activeTab, connectionStatus, connectionStatusText,
@@ -447,7 +572,10 @@ createApp({
             chartDays, selectedDate, lastUpdateTime,
             formatPower, formatEnergy, formatEnergyMWh, formatCo2, formatRevenue,
             flowSpeeds, inverterStatusSummary,
-            loadDashboardData
+            loadDashboardData,
+            formattedSelectedDate,
+            toggleFullScreen
+
         };
     }
 }).mount('#app');

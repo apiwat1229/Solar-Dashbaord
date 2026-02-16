@@ -7,9 +7,9 @@
   --text-primary: #1e293b;
   --text-secondary: #64748b;
   --header-bg: #ffffff;
-  --solar-color: #5fbcd3;
-  --pea-color: #f2726f;
-  --consumption-color: #ffbb00;
+  --solar-color: #5fbcd3; /* Blue */
+  --pea-color: #f2726f; /* Red */
+  --consumption-color: #22c55e; /* Green */
   --success-color: #22c55e;
 }
 
@@ -47,76 +47,231 @@ body {
 }
 
 /* Header & Navbar - Ultra Slim & Clean */
+/* Custom Title Bar */
 .main-header {
-  height: 42px;
-  background: var(--header-bg);
-  border-bottom: 1px solid var(--border-color);
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  align-items: center;
+  background-color: var(
+    --card-bg
+  ); /* Match card background or use a distinct header color */
+  padding: 0 16px;
+  height: 38px; /* Reduced fixed height */
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  -webkit-app-region: drag; /* Make draggable */
+  user-select: none;
   position: sticky;
   top: 0;
-  z-index: 100;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  z-index: 1000;
 }
 
-.header-left {
+.header-left,
+.header-center,
+.header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  height: 100%;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
+.header-right {
+  -webkit-app-region: no-drag; /* Buttons shouldn't be draggable */
   gap: 12px;
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Reduced gap */
+}
+
+.logo-icon {
+  width: 18px; /* Smaller logo */
+  height: 18px;
+  color: var(--solar-color);
 }
 
 .logo-text {
   display: flex;
+  align-items: baseline;
   gap: 4px;
-  font-size: 1.1rem;
-  letter-spacing: 0.5px;
 }
 
-.brand-main {
-  font-weight: 800;
-  color: #1e293b;
+.brand {
+  font-weight: 900;
+  font-size: 1rem; /* Reduced font size */
+  color: var(--text-primary);
 }
-.brand-sub {
+.model {
   font-weight: 300;
-  color: var(--accent-color);
+  font-size: 1rem; /* Reduced font size */
+  color: var(--solar-color);
+}
+.location {
+  font-size: 0.8rem; /* Reduced font size */
+  color: var(--text-secondary);
+  margin-left: 6px;
+  font-weight: 500;
 }
 
-.logo-icon {
-  font-size: 1.2rem;
+.header-info-pill {
+  display: flex;
+  align-items: center;
+  background: var(--bg-dark);
+  padding: 2px 10px; /* Reduced padding */
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  font-size: 0.75rem; /* Reduced font size */
+  color: var(--text-secondary);
+  gap: 6px;
+  height: 26px; /* Reduced height */
 }
 
+.header-info-pill .header-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #ef4444; /* Default red */
+}
+.status-dot.active {
+  background-color: #22c55e;
+}
+.status-dot.blink {
+  animation: pulse 2s infinite;
+}
+
+.window-controls {
+  display: flex;
+  align-items: center;
+}
+
+.win-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  width: 40px; /* Reduced width */
+  height: 100%; /* Full height of header */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s;
+  -webkit-app-region: no-drag;
+}
+
+.win-btn i {
+  width: 16px; /* Smaller icon */
+  height: 16px;
+}
+
+.win-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.win-btn.close-btn:hover {
+  background-color: #ef4444;
+  color: white;
+}
 .status-badge {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  padding: 5px 16px;
+  padding: 3px 12px; /* Slimmer padding */
   background: #f8fafc;
   border: 1px solid var(--border-color);
   color: #475569;
-  border-radius: 30px;
+  border-radius: 10px; /* Requested 10px Radius */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fullscreen-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px; /* Requested 10px Radius */
+  border: 1px solid var(--border-color);
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fullscreen-btn:hover {
+  background: #f1f5f9;
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.navbar-center-container {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.navbar-date-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  padding: 2px 10px; /* Slimmer padding */
+  border-radius: 10px; /* Requested 10px Radius */
+  cursor: pointer;
+  font-size: 0.75rem; /* Reduced font size */
+  font-weight: 600;
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s;
+}
+
+.navbar-date-picker:hover {
+  background: #f1f5f9;
+  border-color: var(--accent-color);
+}
+
+.hidden-date-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.date-display {
+  pointer-events: none;
+}
+
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px; /* Smaller dot */
+  height: 6px;
   border-radius: 50%;
   background: #cbd5e1;
 }
 
 .online .status-dot {
   background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.1);
   animation: pulse 2s infinite;
 }
 
@@ -131,7 +286,7 @@ body {
   }
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0);
   }
   100% {
     transform: scale(0.95);
@@ -173,7 +328,7 @@ main.full-width {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  height: calc(100vh - 42px);
+  height: calc(100vh - 36px); /* Adjusted for 36px header */
   padding-bottom: 12px;
 }
 
@@ -194,7 +349,7 @@ main.full-width {
 .chart-card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: 10px; /* Updated to 10px */
   padding: 20px;
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
@@ -215,6 +370,10 @@ main.full-width {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+}
+
+.power-flow-visual .title-group {
+  margin-bottom: 20px; /* Increased margin for better breathing room */
 }
 
 .chart-wrapper {
@@ -270,7 +429,7 @@ main.full-width {
   padding: 6px 10px;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -406,6 +565,13 @@ main.full-width {
   height: 400px;
 }
 
+.energy-chart .chart-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0; /* Removed margin for flex alignment */
+}
+
 /* Animations */
 .content-fade {
   animation: fadeIn 0.4s ease-out;
@@ -426,7 +592,7 @@ main.full-width {
   position: relative;
   overflow: hidden;
   min-height: 220px;
-  padding: 10px 20px 20px 20px;
+  padding: 20px; /* Restored standard padding */
 }
 
 .flow-container {
@@ -436,8 +602,9 @@ main.full-width {
   padding: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start; /* Aligned to top */
   align-items: center;
+  margin-top: -10px; /* Pull visual up */
 }
 
 .flow-svg {
@@ -481,7 +648,7 @@ main.full-width {
   height: 50px;
   background: white;
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -498,8 +665,63 @@ main.full-width {
 .node-icon.main {
   width: 60px;
   height: 60px;
-  border: 2px solid var(--accent-color);
-  color: var(--accent-color);
+  border: 2px solid #ffbb00; /* Yellow border */
+  color: #ffbb00; /* Yellow icon */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Updated Glow Effect to be subtle grey or removed */
+.glow {
+  animation: none; /* Removed the orange glow animation */
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Static subtle shadow */
+}
+/* Node Icon Pulse Animation */
+@keyframes icon-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes icon-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.node-icon.solar {
+  color: var(--solar-color);
+  border: 2px solid var(--solar-color); /* Match Icon Color */
+  box-shadow: 0 0 10px rgba(95, 188, 211, 0.2);
+}
+
+.node-icon.solar svg {
+  animation: icon-spin 4s linear infinite;
+}
+
+.node-icon.grid {
+  color: var(--pea-color);
+  border: 2px solid var(--pea-color); /* Match Icon Color */
+  box-shadow: 0 0 10px rgba(242, 114, 111, 0.2);
+}
+
+.node-icon.grid svg {
+  animation: icon-pulse 2s infinite ease-in-out;
+  animation-delay: 1s; /* Offset animation */
+}
+
+.node-icon.load {
+  color: var(--consumption-color);
+  border: 2px solid var(--consumption-color); /* Match Icon Color */
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.2);
 }
 
 .node-label {
@@ -543,30 +765,107 @@ main.full-width {
 
 .visual-footer-stats {
   display: flex;
-  justify-content: space-around;
-  padding: 12px;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px; /* Reduced gap from 16px */
+  align-items: center;
+  padding: 12px 12px; /* Reduced horizontal padding */
   border-top: 1px solid var(--border-color);
-  background: rgba(248, 250, 252, 0.5);
-  border-bottom-left-radius: 16px;
-  border-bottom-right-radius: 16px;
+  background: white;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
 }
 
 .footer-stat {
+  flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0; /* Allow flex item to shrink below content size if needed to force wrapping handled elsewhere, or just strict sizing */
 }
 
-.footer-stat .label {
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
+/* Ensure content inside doesn't overflow improperly */
+.footer-stat .stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* Crucial for flex child truncation */
 }
 
 .footer-stat .value {
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--text-primary);
+  white-space: nowrap;
+  font-size: 0.9rem; /* Slightly reduced from default if needed */
+}
+
+.footer-stat .label {
+  white-space: nowrap;
+  font-size: 0.7rem; /* Explicitly set small label size */
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Loading Screen */
+#loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  transition: opacity 0.5s ease;
+}
+
+#loading-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #e2e8f0;
+  border-top: 5px solid #ffbb00; /* Solar brand color */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+.loading-text {
+  font-family: "Outfit", sans-serif;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 1.2rem;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.logo-icon.spin-slow {
+  animation: spin-slow 12s linear infinite;
 }

@@ -9,19 +9,27 @@ function createWindow() {
     const win = new BrowserWindow({
         width: 1920,
         height: 1080,
-        fullscreen: true,
+        fullscreen: false, // Start windowed to see the custom title bar interactions first, or true if kiosk
+        frame: false, // Custom title bar
         autoHideMenuBar: true,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            webSecurity: false
         },
     });
 
-    // Load from Vite dev server during development
-    // win.loadURL('http://localhost:5173');
+    // Open DevTools for debugging
+    win.webContents.openDevTools();
 
-    // Or load the local file
-    win.loadFile('index.html');
+    // Load based on environment
+    if (process.env.NODE_ENV === 'development') {
+        win.loadURL('http://localhost:5173');
+    } else {
+        // Load the built file
+        win.loadFile(path.join(__dirname, 'dist', 'index.html'));
+    }
 }
 
 app.whenReady().then(() => {
