@@ -204,18 +204,27 @@ createApp({
                             }
                         },
                         scales: {
-                            x: { grid: { display: false }, ticks: { color: '#64748b', maxTicksLimit: 12 } },
+                            x: {
+                                grid: { display: false },
+                                ticks: {
+                                    color: '#94a3b8',
+                                    font: { family: 'Outfit', size: 10 },
+                                    maxTicksLimit: 12
+                                }
+                            },
                             y: {
                                 stacked: false,
-                                grid: { color: 'rgba(226, 232, 240, 0.8)' },
+                                grid: { color: 'rgba(226, 232, 240, 0.4)', drawBorder: false },
                                 ticks: {
-                                    color: '#64748b',
+                                    color: '#94a3b8',
+                                    font: { family: 'Outfit', size: 10 },
                                     callback: (val) => `${val.toFixed(1)} kW`
                                 },
                                 title: {
                                     display: true,
                                     text: 'Power (kW)',
-                                    font: { family: 'Outfit', weight: 'bold' }
+                                    color: '#64748b',
+                                    font: { family: 'Outfit', weight: '600', size: 12 }
                                 }
                             }
                         }
@@ -282,17 +291,27 @@ createApp({
                             }
                         },
                         scales: {
-                            x: { stacked: true, grid: { display: false } },
+                            x: {
+                                stacked: true,
+                                grid: { display: false },
+                                ticks: {
+                                    color: '#94a3b8',
+                                    font: { family: 'Outfit', size: 10 }
+                                }
+                            },
                             y: {
                                 stacked: true,
-                                grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                                grid: { color: 'rgba(148, 163, 184, 0.1)', drawBorder: false },
                                 title: {
                                     display: true,
-                                    text: 'Power (kW)',
-                                    font: { family: 'Outfit', weight: 'bold' }
+                                    text: 'Energy (kWh)',
+                                    color: '#64748b',
+                                    font: { family: 'Outfit', weight: '600', size: 12 }
                                 },
                                 ticks: {
-                                    callback: (val) => `${val} kW`
+                                    color: '#94a3b8',
+                                    font: { family: 'Outfit', size: 10 },
+                                    callback: (val) => `${val} kWh`
                                 }
                             }
                         }
@@ -362,10 +381,20 @@ createApp({
                             }
                         },
                         scales: {
-                            x: { stacked: true, grid: { display: false } },
+                            x: {
+                                stacked: true,
+                                grid: { display: false },
+                                ticks: {
+                                    color: '#94a3b8',
+                                    font: { family: 'Outfit', size: 10 }
+                                }
+                            },
                             y: {
                                 stacked: true,
+                                grid: { color: 'rgba(148, 163, 184, 0.1)', drawBorder: false },
                                 ticks: {
+                                    color: '#94a3b8',
+                                    font: { family: 'Outfit', size: 10 },
                                     callback: (val) => `${val.toFixed(1)} MWh`
                                 }
                             }
