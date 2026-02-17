@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -42,9 +42,14 @@
             </div>
 
             <div class="header-right">
-                <div class="header-info-pill">
-                    <div class="status-dot" :class="{ 'active': connectionStatus === 'online', 'blink': connectionStatus === 'online' }"></div>
-                    <span>Update: {{ lastUpdateTime }}</span>
+                <div class="header-info-pill" :class="{ 'warning': connectionStatus === 'throttled' }">
+                    <span v-if="isDemoMode" class="demo-badge">Simulation</span>
+                    <div class="status-dot" :class="{ 'active': connectionStatus === 'online', 'blink': connectionStatus === 'online', 'throttled': connectionStatus === 'throttled' }"></div>
+                    <span class="status-text">{{ connectionStatusText }}</span>
+                    <button v-if="connectionStatus === 'throttled'" @click="forceRefresh" class="header-action-btn" title="Force Refresh">
+                        <i data-lucide="refresh-cw"></i>
+                    </button>
+                    <span class="update-time">Update: {{ lastUpdateTime }}</span>
                 </div>
                 
                 <div class="header-info-pill navbar-date-picker">
@@ -143,21 +148,24 @@
                             </div>
                         </div>
                         <div class="visual-footer-stats">
-                            <div class="footer-stat">
+                            <div class="footer-stat today">
+                                <i data-lucide="zap" class="stat-icon"></i>
                                 <div class="stat-content">
-                                    <span class="label">Energy Today</span>
+                                    <span class="label">Today</span>
                                     <span class="value">{{ formatEnergy(overview.lastDayData?.energy) }}</span>
                                 </div>
                             </div>
                             <div class="stat-divider"></div>
-                            <div class="footer-stat">
+                            <div class="footer-stat month">
+                                <i data-lucide="calendar" class="stat-icon"></i>
                                 <div class="stat-content">
-                                    <span class="label">This Month</span>
+                                    <span class="label">Month</span>
                                     <span class="value">{{ formatEnergyMWh(overview.lastMonthData?.energy) }}</span>
                                 </div>
                             </div>
                             <div class="stat-divider"></div>
-                            <div class="footer-stat">
+                            <div class="footer-stat lifetime">
+                                <i data-lucide="shield-check" class="stat-icon"></i>
                                 <div class="stat-content">
                                     <span class="label">Lifetime</span>
                                     <span class="value">{{ formatEnergyMWh(overview.lifeTimeData?.energy) }}</span>

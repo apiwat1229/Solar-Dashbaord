@@ -4,6 +4,17 @@ const SITE_ID = '4262188';
 const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const BASE_URL = IS_DEV ? '/solaredge' : 'https://monitoringapi.solaredge.com';
 
+const CACHE_DURATIONS = {
+    'details': 60 * 60 * 1000,          // 1 hour
+    'overview': 15 * 60 * 1000,         // 15 minutes
+    'power': 15 * 60 * 1000,            // 15 minutes
+    'energy': 24 * 60 * 60 * 1000,      // 24 hours (Historical data doesn't change)
+    'currentPowerFlow': 10 * 60 * 1000, // 10 minutes
+    'envBenefits': 12 * 60 * 60 * 1000, // 12 hours
+    'inventory': 12 * 60 * 60 * 1000,   // 12 hours
+    'powerDetails': 15 * 60 * 1000      // 15 minutes
+};
+
 const SolarAPI = {
     async fetch(endpoint, params = {}) {
         const queryParams = new URLSearchParams({
@@ -12,49 +23,63 @@ const SolarAPI = {
         });
 
         const url = `${BASE_URL}/site/${SITE_ID}/${endpoint}?${queryParams.toString()}`;
-        console.log(`[API] Fetching: ${url}`);
-
-        // Caching logic
         const cacheKey = `solar_data_${endpoint}_${JSON.stringify(params)}`;
-        const cached = sessionStorage.getItem(cacheKey);
+        const lastSuccessKey = `solar_last_success_${endpoint}`;
+
+        // Check for rate-limiting block
+        const blockedUntil = localStorage.getItem('solar_api_blocked_until');
+        if (blockedUntil && Date.now() < parseInt(blockedUntil)) {
+            // Try specific cache first
+            let cached = localStorage.getItem(cacheKey);
+
+            // Fallback to last success if current param cache is missing (e.g. new day)
+            if (!cached) {
+                cached = localStorage.getItem(lastSuccessKey);
+                if (cached) console.log(`[API] Throttled - Falling back to last successful ${endpoint}`);
+            }
+
+            if (cached) return JSON.parse(cached).data;
+            throw new Error(`API rate limited until ${new Date(parseInt(blockedUntil)).toLocaleTimeString()}`);
+        }
+
+        // Standard TTL Caching
+        const cached = localStorage.getItem(cacheKey);
         if (cached) {
             const { data, timestamp } = JSON.parse(cached);
-            // Cache for 5 minutes
-            if (Date.now() - timestamp < 5 * 60 * 1000) {
+            const duration = CACHE_DURATIONS[endpoint] || 15 * 60 * 1000;
+            if (Date.now() - timestamp < duration) {
+                console.log(`[API] Cache Hit: ${endpoint}`);
                 return data;
             }
         }
 
+        console.log(`[API] Fetching: ${url}`);
         try {
-            const response = await fetch(url, {
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
 
-            if (!response.ok) {
-                const text = await response.text();
-                console.error(`API Error (${response.status}):`, text);
-                throw new Error(`API request failed with status ${response.status}`);
+            if (response.status === 429) {
+                const blockTime = Date.now() + 60 * 60 * 1000;
+                localStorage.setItem('solar_api_blocked_until', blockTime.toString());
+                throw new Error('API Daily limit quota exceeded.');
             }
 
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                const text = await response.text();
-                console.error('Expected JSON but received:', text.substring(0, 100));
-                throw new Error('API returned non-JSON response');
-            }
-
+            if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
             const data = await response.json();
 
-            sessionStorage.setItem(cacheKey, JSON.stringify({
-                data,
-                timestamp: Date.now()
-            }));
+            // Store in cache and as last success
+            const cacheEntry = { data, timestamp: Date.now() };
+            localStorage.setItem(cacheKey, JSON.stringify(cacheEntry));
+            localStorage.setItem(lastSuccessKey, JSON.stringify(cacheEntry));
 
+            localStorage.removeItem('solar_api_blocked_until');
             return data;
         } catch (error) {
-            console.error(`Error fetching ${endpoint}:`, error);
+            // Last resort: return any last successful data
+            const lastSuccess = localStorage.getItem(lastSuccessKey);
+            if (lastSuccess) {
+                console.warn(`[API] Using last success fallback for ${endpoint}`);
+                return JSON.parse(lastSuccess).data;
+            }
             throw error;
         }
     },
@@ -71,8 +96,13 @@ const SolarAPI = {
         return this.fetch('power', { startTime, endTime });
     },
 
-    getEnergy(startDate, endDate, timeUnit = 'DAY') {
-        return this.fetch('energy', { startDate, endDate, timeUnit });
+    getEnergy(startTime, endTime, timeUnit = 'DAY') {
+        return this.fetch('energyDetails', {
+            startTime,
+            endTime,
+            timeUnit,
+            meters: 'PRODUCTION,PURCHASED'
+        });
     },
 
     getPowerFlow() {

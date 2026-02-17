@@ -11,6 +11,7 @@ createApp({
         const inventory = ref({ inverters: [] });
         const chartDays = ref(1);
         const selectedDate = ref(new Date().toISOString().split('T')[0]);
+
         const formatTimestamp = () => {
             const now = new Date();
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -32,12 +33,15 @@ createApp({
             return `${day}-${month}-${year}`;
         });
 
-        watch(selectedDate, () => {
-            loadDashboardData();
-        });
-
-
         const connectionStatusText = computed(() => {
+            if (connectionStatus.value === 'throttled') {
+                const blockedUntil = localStorage.getItem('solar_api_blocked_until');
+                if (blockedUntil) {
+                    const timeStr = new Date(parseInt(blockedUntil)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return `Throttled (until ${timeStr})`;
+                }
+                return 'Rate Limited';
+            }
             return connectionStatus.value === 'online' ? 'Online' : 'Offline';
         });
 
@@ -50,17 +54,14 @@ createApp({
         const flowSpeeds = computed(() => {
             const getSpeed = (val) => {
                 if (!val || val <= 0) return '0s';
-                // Higher power = faster animation (lower duration)
-                // Range: 0.5s (high power) to 5s (low power)
                 const duration = Math.max(0.5, Math.min(5, 10 / (val / 1000 + 0.1)));
                 return `${duration.toFixed(2)}s`;
             };
-
             return {
                 solar: getSpeed(powerFlow.value.pv?.currentPower),
                 grid: getSpeed(powerFlow.value.grid?.currentPower),
                 load: getSpeed(powerFlow.value.load?.currentPower),
-                ups: '3s', // Static or based on value if available
+                ups: '3s',
                 battery: '0s'
             };
         });
@@ -83,7 +84,6 @@ createApp({
             return `${mwh.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MWh`;
         };
 
-
         const formatCo2 = (val) => {
             if (!val) return '0 kg';
             if (val >= 1000) return `${(val / 1000).toFixed(2)} t`;
@@ -96,44 +96,92 @@ createApp({
         };
 
         const powerDetailsData = ref({});
+        const energyData30D = ref([]);
+        const energyData12M = ref([]);
+        const isDemoMode = ref(false);
+
+        const generateMocks = () => {
+            if (Object.keys(overview.value).length === 0) {
+                overview.value = {
+                    lastDayData: { energy: 45200 },
+                    lastMonthData: { energy: 1250000 },
+                    lifeTimeData: { energy: 15400000 },
+                    currentPower: { power: 5200 }
+                };
+            }
+            if (Object.keys(powerFlow.value).length === 0) {
+                powerFlow.value = {
+                    unit: 'W',
+                    pv: { currentPower: 5200 }, grid: { currentPower: 1200 }, load: { currentPower: 4000 },
+                    connections: [{ from: 'PV', to: 'LOAD' }, { from: 'GRID', to: 'LOAD' }]
+                };
+            }
+            if (!powerDetailsData.value.powerDetails) {
+                const now = new Date();
+                const vP = []; const vC = []; const vB = [];
+                for (let i = 0; i < 96; i++) {
+                    const timeStr = `${selectedDate.value} ${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}:00`;
+                    const prod = i > 28 && i < 68 ? (Math.sin((i - 28) / 40 * Math.PI) * 7000) : 0;
+                    const load = 1500 + Math.random() * 2000;
+                    vP.push({ date: timeStr, value: prod }); vC.push({ date: timeStr, value: load }); vB.push({ date: timeStr, value: Math.max(0, load - prod) });
+                }
+                powerDetailsData.value = { powerDetails: { meters: [{ type: 'Production', values: vP }, { type: 'Consumption', values: vC }, { type: 'Purchased', values: vB }] } };
+            }
+        };
 
         const loadDashboardData = async () => {
-            try {
-                const today = selectedDate.value;
-                const startTime = `${today} 00:00:00`;
-                const endTime = `${today} 23:59:59`;
+            let hasError = false;
+            let isThrottled = false;
 
-                // Sequence calls to avoid Rate Limit (429)
-                const ov = await SolarAPI.getOverview();
-                const flow = await SolarAPI.getPowerFlow();
-                const env = await SolarAPI.getEnvBenefits();
-                const inv = await SolarAPI.getInventory();
-                const pDetails = await SolarAPI.getPowerDetails(startTime, endTime);
-
-                overview.value = ov.overview || {};
-                const rawFlow = flow.siteCurrentPowerFlow || {};
-                powerFlow.value = {
-                    unit: rawFlow.unit,
-                    pv: rawFlow.PV || rawFlow.pv || {},
-                    grid: rawFlow.GRID || rawFlow.grid || {},
-                    load: rawFlow.LOAD || rawFlow.load || {},
-                    connections: rawFlow.connections || []
-                };
-
-                envBenefits.value = env.envBenefits || {};
-                inventory.value = inv.Inventory || { inverters: [] };
-                powerDetailsData.value = pDetails || {};
-
-                lastUpdateTime.value = formatTimestamp();
-                connectionStatus.value = 'online';
-
-                if (activeTab.value === 'dashboard') {
-                    nextTick(() => initDashboardCharts());
+            const updateData = async (task, targetRef, processFn) => {
+                try {
+                    const data = await task();
+                    if (data) targetRef.value = processFn ? processFn(data) : data;
+                } catch (error) {
+                    if (error.message.includes('limit') || error.message.includes('rate limited')) isThrottled = true;
+                    else { console.error(`Error loading data:`, error); hasError = true; }
                 }
-            } catch (error) {
-                console.error('Data Load Error:', error);
-                connectionStatus.value = 'offline';
-            }
+            };
+
+            const today = selectedDate.value;
+            const startTime = `${today} 00:00:00`;
+            const endTime = `${today} 23:59:59`;
+
+            const date30d = new Date(); date30d.setDate(date30d.getDate() - 29);
+            const date12m = new Date(); date12m.setMonth(date12m.getMonth() - 11);
+            const start30d = date30d.toISOString().split('T')[0];
+            const start12m = date12m.toISOString().split('T')[0].substring(0, 7) + '-01';
+
+            await Promise.allSettled([
+                updateData(() => SolarAPI.getOverview(), overview, d => d.overview || {}),
+                updateData(() => SolarAPI.getPowerFlow(), powerFlow, d => {
+                    const rawFlow = d.siteCurrentPowerFlow || {};
+                    return { unit: rawFlow.unit, pv: rawFlow.PV || {}, grid: rawFlow.GRID || {}, load: rawFlow.LOAD || {}, connections: rawFlow.connections || [] };
+                }),
+                updateData(() => SolarAPI.getEnvBenefits(), envBenefits, d => d.envBenefits || {}),
+                updateData(() => SolarAPI.getInventory(), inventory, d => d.Inventory || { inverters: [] }),
+                updateData(() => SolarAPI.getPowerDetails(startTime, endTime), powerDetailsData),
+                updateData(() => SolarAPI.getEnergy(start30d + ' 00:00:00', today + ' 23:59:59', 'DAY'), energyData30D, d => d.energyDetails?.meters || []),
+                updateData(() => SolarAPI.getEnergy(start12m + ' 00:00:00', today + ' 23:59:59', 'MONTH'), energyData12M, d => d.energyDetails?.meters || [])
+            ]);
+
+            isDemoMode.value = false;
+            if (isThrottled) {
+                connectionStatus.value = 'throttled';
+                if (Object.keys(overview.value).length === 0 || !powerDetailsData.value.powerDetails) {
+                    generateMocks();
+                    isDemoMode.value = true;
+                }
+            } else if (hasError) connectionStatus.value = 'offline';
+            else connectionStatus.value = 'online';
+
+            lastUpdateTime.value = formatTimestamp();
+            if (activeTab.value === 'dashboard') nextTick(() => initDashboardCharts());
+        };
+
+        const forceRefresh = () => {
+            localStorage.removeItem('solar_api_blocked_until');
+            loadDashboardData();
         };
 
         let areaChart = null;
@@ -141,430 +189,253 @@ createApp({
         let monthlyBarChart = null;
 
         const initDashboardCharts = async () => {
-            // Daily Area Chart
             const areaCtx = document.getElementById('dailyAreaChart');
             if (areaCtx) {
                 if (areaChart) areaChart.destroy();
-
                 const rawData = powerDetailsData.value;
                 const meters = rawData?.powerDetails?.meters || [];
-
                 const getMeterValues = (type) => {
                     const meter = meters.find(m => m.type.toLowerCase() === type.toLowerCase());
                     return meter ? meter.values : [];
                 };
-
                 const productionValues = getMeterValues('Production');
                 const consumptionValues = getMeterValues('Consumption');
                 const purchasedValues = getMeterValues('Purchased');
 
-                // Generate 24-hour labels (00:00 to 23:55, every 5 mins to match typically granular data)
                 const timeLabels = [];
                 for (let h = 0; h < 24; h++) {
-                    for (let m = 0; m < 60; m += 15) { // 15-minute intervals for cleaner chart
+                    for (let m = 0; m < 60; m += 15) {
                         timeLabels.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
                     }
                 }
-                timeLabels.push('24:00'); // Explicitly add end of day
+                timeLabels.push('24:00');
 
-                // Helper to map data to time labels
                 const mapDataToLabels = (values) => {
                     const dataMap = {};
                     values.forEach(v => {
                         const d = new Date(v.date.replace(' ', 'T'));
-                        // Round key to nearest 15 min
                         const h = d.getHours();
                         const m = Math.floor(d.getMinutes() / 15) * 15;
                         const key = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
                         dataMap[key] = (v.value || 0) / 1000;
                     });
-
-                    // Fill standard labels, use 0 if no data point matches (or null for gaps if preferred)
                     return timeLabels.map(label => dataMap[label] !== undefined ? dataMap[label] : 0);
                 };
-
-                const solarData = mapDataToLabels(productionValues);
-                const consumptionData = mapDataToLabels(consumptionValues);
-                const purchasedData = mapDataToLabels(purchasedValues);
 
                 areaChart = new Chart(areaCtx, {
                     type: 'line',
                     data: {
                         labels: timeLabels,
                         datasets: [
-                            {
-                                label: 'Solar Production',
-                                data: solarData,
-                                borderColor: '#5fbcd3', // Blue
-                                backgroundColor: '#5fbcd3', // Solid Blue
-                                fill: true,
-                                tension: 0.4,
-                                pointRadius: 0,
-                                borderWidth: 0, // Remove border for solid area look
-                                order: 1
-                            },
-                            {
-                                label: 'Consumption',
-                                data: consumptionData,
-                                borderColor: '#f2726f', // Red
-                                backgroundColor: '#f2726f', // Solid Red
-                                fill: true,
-                                tension: 0.4,
-                                pointRadius: 0,
-                                borderWidth: 0,
-                                order: 2
-                            },
-                            {
-                                label: 'Purchased (PEA)',
-                                data: purchasedData,
-                                borderColor: '#22c55e', // Green
-                                backgroundColor: '#22c55e', // Solid Green
-                                fill: true,
-                                tension: 0.4,
-                                pointRadius: 0,
-                                borderWidth: 0,
-                                order: 3
-                            }
+                            { label: 'Solar Production', data: mapDataToLabels(productionValues), backgroundColor: '#5fbcd3', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 0, order: 1 },
+                            { label: 'Consumption', data: mapDataToLabels(consumptionValues), backgroundColor: '#f2726f', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 0, order: 2 },
+                            { label: 'Purchased (PEA)', data: mapDataToLabels(purchasedValues), backgroundColor: '#22c55e', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 0, order: 3 }
                         ]
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                mode: 'index',
-                                intersect: false,
-                                callbacks: {
-                                    label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} kW`
-                                }
-                            }
-                        },
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} kW` } } },
                         scales: {
-                            x: {
-                                grid: { display: false },
-                                ticks: {
-                                    color: '#94a3b8',
-                                    font: { family: 'Outfit', size: 10 },
-                                    maxTicksLimit: 13,
-                                    autoSkip: false,
-                                    callback: function (val, index) {
-                                        const label = this.getLabelForValue(val);
-                                        if (index === 0) return label;
-                                        if (index === this.chart.data.labels.length - 1) return label;
-                                        if (index % 8 === 0) return label;
-                                        return null;
-                                    }
-                                }
-                            },
-                            y: {
-                                stacked: false,
-                                grid: { color: 'rgba(226, 232, 240, 0.4)', drawBorder: false },
-                                ticks: {
-                                    color: '#94a3b8',
-                                    font: { family: 'Outfit', size: 10 },
-                                    callback: (val) => `${val.toFixed(1)} kW`
-                                },
-                                title: {
-                                    display: true,
-                                    text: 'Power (kW)',
-                                    color: '#64748b',
-                                    font: { family: 'Outfit', weight: '600', size: 12 }
-                                }
-                            }
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 13 } },
+                            y: { grid: { color: 'rgba(226, 232, 240, 0.4)', drawBorder: false }, ticks: { color: '#94a3b8', font: { size: 10 }, callback: (val) => `${Math.round(val).toLocaleString()} kW` } }
                         }
                     }
                 });
             }
 
-            // Daily Bar Chart
             const dailyBarCtx = document.getElementById('dailyBarChart');
             if (dailyBarCtx) {
                 if (dailyBarChart) dailyBarChart.destroy();
 
-                const labels = [];
-                const now = selectedDate.value ? new Date(selectedDate.value) : new Date();
+                const meters = energyData30D.value || [];
+                const production = meters.find(m => m.type.toLowerCase() === 'production')?.values || [];
+                const purchased = meters.find(m => m.type.toLowerCase() === 'purchased')?.values || [];
 
-                for (let i = 29; i >= 0; i--) {
-                    const d = new Date(now);
-                    d.setDate(now.getDate() - i);
-                    labels.push(d.getDate().toString().padStart(2, '0') + ' ' + d.toLocaleString('default', { month: 'short' }));
-                }
+                // Sort by date
+                const sortedProd = [...production].sort((a, b) => new Date(a.date) - new Date(b.date));
+                const labels = sortedProd.map(v => {
+                    const d = new Date(v.date);
+                    return d.getDate().toString().padStart(2, '0') + ' ' + d.toLocaleString('default', { month: 'short' });
+                });
+
+                const solarData = sortedProd.map(v => (v.value || 0) / 1000);
+                const peaData = labels.map(label => {
+                    const match = purchased.find(v => {
+                        const d = new Date(v.date);
+                        const key = d.getDate().toString().padStart(2, '0') + ' ' + d.toLocaleString('default', { month: 'short' });
+                        return key === label;
+                    });
+                    return match ? (match.value || 0) / 1000 : 0;
+                });
 
                 dailyBarChart = new Chart(dailyBarCtx, {
                     type: 'bar',
                     data: {
                         labels: labels,
                         datasets: [
-                            {
-                                label: 'Solar',
-                                data: Array.from({ length: 30 }, () => Math.random() * 80 + 40),
-                                backgroundColor: '#5fbcd3', // Solid Blue
-                                borderColor: '#5fbcd3',
-                                borderWidth: 0,
-                                borderRadius: 4
-                            },
-                            {
-                                label: 'PEA',
-                                data: Array.from({ length: 30 }, () => Math.random() * 250 + 100),
-                                backgroundColor: '#22c55e', // Solid Green
-                                borderColor: '#22c55e',
-                                borderWidth: 0,
-                                borderRadius: 4
-                            }
+                            { label: 'Solar', data: solarData, backgroundColor: '#5fbcd3', borderWidth: 0, borderRadius: 4 },
+                            { label: 'PEA', data: peaData, backgroundColor: '#f2726f', borderWidth: 0, borderRadius: 4 }
                         ]
                     },
                     plugins: [ChartDataLabels],
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
+                        responsive: true, maintainAspectRatio: false,
                         plugins: {
                             legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(1)} kWh`
-                                }
-                            },
+                            tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(1)} kWh` } },
                             datalabels: {
-                                color: '#1e293b',
-                                font: { weight: 'bold', size: 9 },
-                                textAlign: 'center',
+                                color: '#fff', font: { weight: 'bold', size: 9 },
                                 formatter: (val, ctx) => {
-                                    const dataset = ctx.chart.data.datasets;
-                                    const total = dataset[0].data[ctx.dataIndex] + dataset[1].data[ctx.dataIndex];
-                                    if (total === 0 || val < (total * 0.1)) return '';
-                                    return ((val / total) * 100).toFixed(0);
+                                    const total = ctx.chart.data.datasets.reduce((acc, ds) => acc + ds.data[ctx.dataIndex], 0);
+                                    return (total > 0 && val > total * 0.1) ? ((val / total) * 100).toFixed(0) : '';
                                 },
-                                anchor: 'center',
-                                align: 'center'
+                                anchor: 'center', align: 'center'
                             }
                         },
                         scales: {
-                            x: {
-                                stacked: true,
-                                grid: { display: false },
-                                ticks: {
-                                    color: '#94a3b8',
-                                    font: { family: 'Outfit', size: 10 }
-                                }
-                            },
+                            x: { stacked: true, grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
                             y: {
                                 stacked: true,
                                 grid: { color: 'rgba(148, 163, 184, 0.1)', drawBorder: false },
-                                title: {
-                                    display: true,
-                                    text: 'Energy (kWh)',
-                                    color: '#64748b',
-                                    font: { family: 'Outfit', weight: '600', size: 12 }
-                                },
-                                ticks: {
-                                    color: '#94a3b8',
-                                    font: { family: 'Outfit', size: 10 },
-                                    callback: (val) => `${val} kWh`
-                                }
+                                ticks: { color: '#94a3b8', font: { size: 10 }, callback: (v) => `${Math.round(v).toLocaleString()} kWh` },
+                                title: { display: true, text: 'Energy (kWh)', color: '#64748b', font: { weight: '600', size: 11 } }
                             }
                         }
                     }
                 });
             }
 
-            // Monthly Bar Chart (12-month Percent Ratio)
             const monthlyCtx = document.getElementById('monthlyBarChart');
             if (monthlyCtx) {
                 if (monthlyBarChart) monthlyBarChart.destroy();
 
-                const months = [];
-                const now = new Date();
-                for (let i = 11; i >= 0; i--) {
-                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                    months.push(d.toLocaleString('default', { month: 'short', year: 'numeric' }));
-                }
+                const meters = energyData12M.value || [];
+                const production = meters.find(m => m.type.toLowerCase() === 'production')?.values || [];
+                const purchased = meters.find(m => m.type.toLowerCase() === 'purchased')?.values || [];
+
+                const sortedProd = [...production].sort((a, b) => new Date(a.date) - new Date(b.date));
+                const months = sortedProd.map(v => {
+                    const d = new Date(v.date);
+                    return d.toLocaleString('default', { month: 'short', year: 'numeric' });
+                });
+
+                const solarMWh = sortedProd.map(v => (v.value || 0) / 1000000);
+                const peaMWh = months.map(month => {
+                    const match = purchased.find(v => {
+                        const d = new Date(v.date);
+                        return d.toLocaleString('default', { month: 'short', year: 'numeric' }) === month;
+                    });
+                    return match ? (match.value || 0) / 1000000 : 0;
+                });
 
                 monthlyBarChart = new Chart(monthlyCtx, {
-                    type: 'bar',
-                    plugins: [ChartDataLabels],
+                    type: 'bar', plugins: [ChartDataLabels],
                     data: {
                         labels: months,
                         datasets: [
-                            {
-                                label: 'Solar',
-                                data: months.map(() => Math.random() * 0.4 + 0.1),
-                                backgroundColor: '#5fbcd3', // Solid Blue
-                                borderColor: '#5fbcd3',
-                                borderWidth: 0,
-                                borderRadius: 4
-                            },
-                            {
-                                label: 'PEA',
-                                data: months.map(() => Math.random() * 0.6 + 0.2),
-                                backgroundColor: '#22c55e', // Solid Green
-                                borderColor: '#22c55e',
-                                borderWidth: 0,
-                                borderRadius: 4
-                            }
+                            { label: 'Solar', data: solarMWh, backgroundColor: '#5fbcd3', borderWidth: 0, borderRadius: 4 },
+                            { label: 'PEA', data: peaMWh, backgroundColor: '#f2726f', borderWidth: 0, borderRadius: 4 }
                         ]
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        layout: {
-                            padding: { top: 20 }
-                        },
+                        responsive: true, maintainAspectRatio: false, layout: { padding: { top: 25 } },
                         plugins: {
-                            legend: {
-                                display: false
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} MWh`
-                                }
-                            },
+                            legend: { display: false },
+                            tooltip: { mode: 'index', intersect: false, callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} MWh` } },
                             datalabels: {
-                                color: '#1e293b',
-                                font: { weight: 'bold', size: 9 },
-                                textAlign: 'center',
+                                color: '#fff', font: { weight: 'bold', size: 9 },
                                 formatter: (val, ctx) => {
-                                    const dataset = ctx.chart.data.datasets;
-                                    const total = dataset[0].data[ctx.dataIndex] + dataset[1].data[ctx.dataIndex];
-                                    if (val < 0.1) return '';
-                                    return ((val / total) * 100).toFixed(0) + '%';
+                                    const total = ctx.chart.data.datasets.reduce((acc, ds) => acc + ds.data[ctx.dataIndex], 0);
+                                    return (total > 0 && val > total * 0.1) ? ((val / total) * 100).toFixed(0) + '%' : '';
                                 },
-                                anchor: 'center',
-                                align: 'center'
+                                anchor: 'center', align: 'center'
                             }
                         },
                         scales: {
-                            x: {
-                                stacked: true,
-                                grid: { display: false },
-                                ticks: {
-                                    color: '#94a3b8',
-                                    font: { family: 'Outfit', size: 10 }
-                                }
-                            },
+                            x: { stacked: true, grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
                             y: {
                                 stacked: true,
                                 grid: { color: 'rgba(148, 163, 184, 0.1)', drawBorder: false },
-                                ticks: {
-                                    color: '#94a3b8',
-                                    font: { family: 'Outfit', size: 10 },
-                                    callback: (val) => `${val.toFixed(1)} MWh`
-                                }
+                                ticks: { color: '#94a3b8', font: { size: 10 }, callback: (v) => `${Math.round(v).toLocaleString()} MWh` },
+                                title: { display: true, text: 'Energy (MWh)', color: '#64748b', font: { weight: '600', size: 11 } }
                             }
                         }
                     }
                 });
 
-                // Add separate plugin for Totals above bars
+                // Totals Plugin for Monthly Chart
                 const totalPlugin = {
                     id: 'totalsAboveBars',
                     afterDraw: (chart) => {
                         const { ctx, data, scales: { x, y } } = chart;
-                        if (chart.options.plugins.datalabels.display === false) return;
-
                         ctx.save();
-                        ctx.font = 'bold 10px Outfit';
-                        ctx.fillStyle = '#1e293b';
+                        ctx.font = 'bold 9px Outfit';
+                        ctx.fillStyle = '#64748b';
                         ctx.textAlign = 'center';
 
                         const meta0 = chart.getDatasetMeta(0);
                         const meta1 = chart.getDatasetMeta(1);
 
                         data.labels.forEach((label, i) => {
-                            const total = data.datasets[0].data[i] + data.datasets[1].data[i];
+                            const total = (data.datasets[0].data[i] || 0) + (data.datasets[1].data[i] || 0);
+                            if (total <= 0) return;
                             const xPos = meta0.data[i].x;
-                            const yPos = Math.min(meta0.data[i].y, meta1.data[i].y) - 10;
-                            ctx.fillText(`${total.toFixed(1)} MWh`, xPos, yPos);
+                            // Top of the stack
+                            const yPos = Math.min(meta0.data[i].y, meta1.data[i].y) - 8;
+                            ctx.fillText(`${total.toFixed(1)} M`, xPos, yPos);
                         });
                         ctx.restore();
                     }
                 };
                 monthlyBarChart.config.plugins.push(totalPlugin);
+                monthlyBarChart.update();
             }
         };
 
         watch(activeTab, (newTab) => {
-            if (newTab === 'dashboard') nextTick(() => initDashboardCharts());
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+            if (newTab === 'dashboard') nextTick(() => {
+                initDashboardCharts();
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            });
+            else if (typeof lucide !== 'undefined') lucide.createIcons();
         });
 
-        // Watch selectedDate to reload data
-        watch(selectedDate, (newDate, oldDate) => {
-            if (newDate !== oldDate) {
-                loadDashboardData();
-            }
-        });
+        watch(selectedDate, () => loadDashboardData());
 
-        // Window Controls
         const setupWindowControls = () => {
-            // Check if electronAPI exists (it won't in standard browser)
             if (window.electronAPI) {
                 const minimizeBtn = document.getElementById('btn-minimize');
                 const maximizeBtn = document.getElementById('btn-maximize');
                 const closeBtn = document.getElementById('btn-close');
-
                 if (minimizeBtn) minimizeBtn.addEventListener('click', () => window.electronAPI.minimize());
                 if (maximizeBtn) maximizeBtn.addEventListener('click', () => window.electronAPI.toggleMaximize());
                 if (closeBtn) closeBtn.addEventListener('click', () => window.electronAPI.close());
-            } else {
-                console.log("Electron API not found. Window controls disabled.");
             }
+        };
+
+        const toggleFullScreen = () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else if (document.exitFullscreen) document.exitFullscreen();
         };
 
         onMounted(() => {
-            // Setup window controls
             setupWindowControls();
-
-            // Initial data load
             loadDashboardData().then(() => {
-                // Hide loading screen after data is ready
                 const loader = document.getElementById('loading-screen');
-                if (loader) {
-                    setTimeout(() => {
-                        loader.classList.add('hidden');
-                    }, 500);
-                }
+                if (loader) setTimeout(() => loader.classList.add('hidden'), 500);
+                if (typeof lucide !== 'undefined') lucide.createIcons();
             });
-
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
-
-            // Initialize Flatpickr
+            if (typeof lucide !== 'undefined') lucide.createIcons();
             flatpickr(".hidden-date-input", {
-                dateFormat: "Y-m-d",
-                defaultDate: selectedDate.value,
-                disableMobile: true, // Force custom picker on mobile
-                onChange: (selectedDates, dateStr) => {
-                    selectedDate.value = dateStr;
-                }
+                dateFormat: "Y-m-d", defaultDate: selectedDate.value, disableMobile: true,
+                onChange: (selectedDates, dateStr) => { selectedDate.value = dateStr; }
             });
-
-            setInterval(loadDashboardData, 5 * 60 * 1000);
-
-            // Handle Fullscreen Exit Layout Fix
+            setInterval(loadDashboardData, 15 * 60 * 1000);
             document.addEventListener('fullscreenchange', () => {
-                // Force a resize event to update charts and layout
                 window.dispatchEvent(new Event('resize'));
-                // Optional: Re-init if drastic layout changes occur
-                setTimeout(() => {
-                    initDashboardCharts();
-                }, 100);
+                setTimeout(() => initDashboardCharts(), 100);
             });
         });
-
-
-        const toggleFullScreen = () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(e => {
-                    console.error(`Error attempting to enable full-screen mode: ${e.message} (${e.name})`);
-                });
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                }
-            }
-        };
 
         return {
             activeTab, connectionStatus, connectionStatusText,
@@ -572,10 +443,8 @@ createApp({
             chartDays, selectedDate, lastUpdateTime,
             formatPower, formatEnergy, formatEnergyMWh, formatCo2, formatRevenue,
             flowSpeeds, inverterStatusSummary,
-            loadDashboardData,
-            formattedSelectedDate,
-            toggleFullScreen
-
+            loadDashboardData, forceRefresh, isDemoMode,
+            formattedSelectedDate, toggleFullScreen
         };
     }
 }).mount('#app');

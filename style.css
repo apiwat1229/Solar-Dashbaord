@@ -141,8 +141,53 @@ body {
 .status-dot.active {
   background-color: #22c55e;
 }
+.status-dot.throttled {
+  background-color: #f59e0b; /* Orange */
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1);
+}
+.demo-badge {
+  background: #fef2f2;
+  color: #ef4444;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid #fee2e2;
+  font-size: 0.65rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-right: 4px;
+}
 .status-dot.blink {
   animation: pulse 2s infinite;
+}
+
+.header-info-pill.warning {
+  background-color: #fffbeb;
+  border-color: #fef3c7;
+  color: #92400e;
+}
+
+.header-action-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.header-action-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  transform: rotate(45deg);
+}
+
+.header-action-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .window-controls {
@@ -767,47 +812,89 @@ main.full-width {
   display: flex;
   justify-content: space-between;
   width: 100%;
-  gap: 8px; /* Reduced gap from 16px */
+  gap: 4px; /* Tighter gap */
   align-items: center;
-  padding: 12px 12px; /* Reduced horizontal padding */
+  padding: 12px 8px; /* Tighter padding */
   border-top: 1px solid var(--border-color);
-  background: white;
+  background: var(--card-bg);
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
+  min-height: 70px; /* Reduced to fit better */
 }
 
 .footer-stat {
   flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 0; /* Allow flex item to shrink below content size if needed to force wrapping handled elsewhere, or just strict sizing */
+  gap: 6px; /* Tighter gap */
+  padding: 4px;
+  border-radius: 8px;
+  background: transparent;
+  transition: all 0.2s ease;
+  min-width: 0; /* Prevent overflow */
 }
 
-/* Ensure content inside doesn't overflow improperly */
-.footer-stat .stat-content {
+.footer-stat:hover {
+  background: var(--bg-dark);
+}
+
+.stat-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
   display: flex;
-  flex-direction: column;
-  min-width: 0; /* Crucial for flex child truncation */
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
 }
 
-.footer-stat .value {
-  white-space: nowrap;
-  font-size: 0.9rem; /* Slightly reduced from default if needed */
+.stat-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 3; /* Bold icons */
 }
 
-.footer-stat .label {
-  white-space: nowrap;
-  font-size: 0.7rem; /* Explicitly set small label size */
-  color: var(--text-secondary);
-  font-weight: 600;
+/* Color Themes - High Visibility Icons */
+.footer-stat.today .stat-icon {
+  color: #5fbcd3;
+}
+.footer-stat.month .stat-icon {
+  color: #22c55e;
+}
+.footer-stat.lifetime .stat-icon {
+  color: #f2726f;
+}
+
+.footer-stat:hover .stat-icon {
+  transform: scale(1.15);
 }
 
 .stat-content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+}
+
+.footer-stat .label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.footer-stat .value {
+  font-size: 0.85rem; /* Smaller Font for narrow columns */
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.stat-divider {
+  width: 1px;
+  background: var(--border-color);
+  margin: 8px 0;
 }
 
 /* Loading Screen */
