@@ -69,7 +69,9 @@ createApp({
         const formatPower = (val, unit = 'W') => {
             if (val === undefined || val === null) return '0 kW';
             let kw = unit && unit.toLowerCase() === 'kw' ? val : val / 1000;
-            return `${kw.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kW`;
+            const absoluteKw = Math.abs(kw);
+            const decimals = absoluteKw < 10 ? 2 : 0;
+            return `${kw.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: decimals })} kW`;
         };
 
         const formatEnergy = (val) => {
@@ -407,9 +409,11 @@ createApp({
                 const minimizeBtn = document.getElementById('btn-minimize');
                 const maximizeBtn = document.getElementById('btn-maximize');
                 const closeBtn = document.getElementById('btn-close');
+                const reloadBtn = document.getElementById('btn-reload');
                 if (minimizeBtn) minimizeBtn.addEventListener('click', () => window.electronAPI.minimize());
                 if (maximizeBtn) maximizeBtn.addEventListener('click', () => window.electronAPI.toggleMaximize());
                 if (closeBtn) closeBtn.addEventListener('click', () => window.electronAPI.close());
+                if (reloadBtn) reloadBtn.addEventListener('click', () => window.electronAPI.reload());
             }
         };
 
