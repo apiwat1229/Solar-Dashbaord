@@ -1,4 +1,4 @@
-const { createApp, ref, onMounted, computed, watch, nextTick } = Vue;
+const { createApp, ref, onMounted, onUnmounted, computed, watch, nextTick } = Vue;
 
 createApp({
     setup() {
@@ -20,6 +20,33 @@ createApp({
 
         const displayMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const getTodayDate = () => formatDateValue(new Date());
+        const shiftDateValue = (dateStr, days) => {
+            const date = new Date(`${dateStr}T00:00:00`);
+            date.setDate(date.getDate() + days);
+            return formatDateValue(date);
+        };
+        const shiftMonthValue = (dateStr, months) => {
+            const date = new Date(`${dateStr}T00:00:00`);
+            date.setMonth(date.getMonth() + months);
+            return formatDateValue(date);
+        };
+        const getStartOfMonthValue = (dateStr) => {
+            const date = new Date(`${dateStr}T00:00:00`);
+            date.setDate(1);
+            return formatDateValue(date);
+        };
+        const getStartOfWeekValue = (dateStr) => {
+            const date = new Date(`${dateStr}T00:00:00`);
+            const offset = (date.getDay() + 6) % 7;
+            date.setDate(date.getDate() - offset);
+            return formatDateValue(date);
+        };
+        const getInclusiveDaySpan = (startDate, endDate) => {
+            const start = new Date(`${startDate}T00:00:00`);
+            const end = new Date(`${endDate}T00:00:00`);
+            return Math.floor((end - start) / (24 * 60 * 60 * 1000)) + 1;
+        };
+        const formatShortPercent = (value) => `${Math.abs(value).toFixed(1)}%`;
 
         const selectedRangeStart = ref(getTodayDate());
         const selectedRangeEnd = ref(getTodayDate());
@@ -34,6 +61,19 @@ createApp({
             return `${day}-${month}-${year} | ${time}`;
         };
         const lastUpdateTime = ref(formatTimestamp());
+        const powerFlowUpdatedAt = ref(null);
+
+        const formatDisplayDateTimeFull = (date) => {
+            if (!date) return '-';
+            const months = displayMonths;
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = months[date.getMonth()];
+            const year = date.getFullYear();
+            const time = date.toTimeString().split(' ')[0];
+            return `${day}-${month}-${year} | ${time}`;
+        };
+
+        const powerFlowUpdatedAtText = computed(() => formatDisplayDateTimeFull(powerFlowUpdatedAt.value));
 
         const formatDisplayDate = (dateStr) => {
             if (!dateStr) return '';
@@ -42,6 +82,18 @@ createApp({
             const month = displayMonths[date.getMonth()];
             const year = date.getFullYear();
             return `${day}-${month}-${year}`;
+        };
+
+        const formatHHMMFromMinutes = (minutes) => {
+            const safeMinutes = Math.max(0, Math.min(24 * 60 - 1, Number(minutes) || 0));
+            const hh = String(Math.floor(safeMinutes / 60)).padStart(2, '0');
+            const mm = String(safeMinutes % 60).padStart(2, '0');
+            return `${hh}:${mm}`;
+        };
+
+        const formatDisplayDateTime = (dateStr, minutes) => {
+            if (!dateStr) return '';
+            return `${formatDisplayDate(dateStr)} ${formatHHMMFromMinutes(minutes)}`;
         };
 
         const formattedSelectedDate = computed(() => {
@@ -127,9 +179,22 @@ createApp({
         const powerDetailsData = ref({});
         const energyData30D = ref([]);
         const energyData12M = ref([]);
+        const previousDayPowerDetails = ref({});
+        const trendDailyEnergyData = ref([]);
+        const lifetimeConsumptionData = ref([]);
+        const dataPeriod = ref({});
+        const consumptionTrendCards = ref([]);
+        const consumptionSummary = ref({
+            todayText: '0.0 KWh',
+            monthText: '0.0 MWh',
+            lifetimeText: '0.0 MWh'
+        });
         const isDemoMode = ref(false);
         const showCloseConfirm = ref(false);
         let datePickerInstance = null;
+        let realtimeRefreshTimer = null;
+        let trendSummaryRefreshTimer = null;
+        let powerFlowRefreshTimer = null;
 
         const applyDateRange = (startDate, endDate = startDate) => {
             selectedRangeStart.value = startDate;
@@ -145,6 +210,246 @@ createApp({
             const endDate = formatDateValue(selectedDates[selectedDates.length - 1] || selectedDates[0]);
             selectedRangeStart.value = startDate;
             selectedRangeEnd.value = endDate;
+        };
+
+        const getMeterValues = (meters, type) => {
+            const meter = (meters || []).find(item => item.type?.toLowerCase() === type.toLowerCase());
+            return meter?.values || [];
+        };
+
+        const sumPowerValuesAsEnergy = (values, cutoffMinutes = 24 * 60) => {
+            return (values || []).reduce((total, item) => {
+                if (!item?.date) return total;
+                const sampleDate = new Date(item.date.replace(' ', 'T'));
+                const sampleMinutes = sampleDate.getHours() * 60 + sampleDate.getMinutes();
+                if (sampleMinutes > cutoffMinutes) return total;
+                return total + ((Number(item.value) || 0) / 4);
+            }, 0);
+        };
+
+        const sumEnergyValuesByDateRange = (values, startDate, endDate) => {
+            return (values || []).reduce((total, item) => {
+                const dateKey = (item?.date || '').slice(0, 10);
+                if (!dateKey || dateKey < startDate || dateKey > endDate) return total;
+                return total + (Number(item.value) || 0);
+            }, 0);
+        };
+
+        const sumEnergyValues = (values) => {
+            return (values || []).reduce((total, item) => total + (Number(item.value) || 0), 0);
+        };
+
+        const buildTrendCard = ({ key, title, compareLabel, compareRangeText, currentValue, previousValue, formatter = formatEnergy }) => {
+            const hasPrevious = previousValue > 0;
+            const delta = hasPrevious ? ((currentValue - previousValue) / previousValue) * 100 : 0;
+            const deltaAmount = hasPrevious ? (currentValue - previousValue) : 0;
+            const direction = !hasPrevious ? 'flat' : (delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat'));
+            const statusText = !hasPrevious
+                ? 'No previous data'
+                : direction === 'up'
+                    ? `+${formatShortPercent(delta)}`
+                    : direction === 'down'
+                        ? `-${formatShortPercent(delta)}`
+                        : '0.0%';
+            const summary = !hasPrevious
+                ? 'Not enough data to compare'
+                : direction === 'up'
+                    ? `Higher than ${compareLabel}`
+                    : direction === 'down'
+                        ? `Lower than ${compareLabel}`
+                        : `Same as ${compareLabel}`;
+
+            return {
+                key,
+                title,
+                compareLabel,
+                compareRangeText,
+                currentText: formatter(currentValue),
+                previousText: hasPrevious ? formatter(previousValue) : '-',
+                deltaText: hasPrevious ? `${deltaAmount >= 0 ? '+' : '-'}${formatter(Math.abs(deltaAmount))}` : '-',
+                statusText,
+                summary,
+                direction
+            };
+        };
+
+        const computeConsumptionTrends = (focusDate) => {
+            const isTodayFocus = focusDate === getTodayDate();
+            const now = new Date();
+            const cutoffMinutes = isTodayFocus ? (now.getHours() * 60 + now.getMinutes()) : (24 * 60);
+
+            const currentDayConsumption = sumPowerValuesAsEnergy(
+                getMeterValues(powerDetailsData.value.powerDetails?.meters, 'Consumption'),
+                cutoffMinutes
+            );
+            const previousDayConsumption = sumPowerValuesAsEnergy(
+                getMeterValues(previousDayPowerDetails.value.powerDetails?.meters, 'Consumption'),
+                cutoffMinutes
+            );
+
+            const dayRangeCurrent = `${formatDisplayDate(focusDate)} 00:00–${formatHHMMFromMinutes(cutoffMinutes)}`;
+            const previousDayDate = shiftDateValue(focusDate, -1);
+            const dayRangePrevious = `${formatDisplayDate(previousDayDate)} 00:00–${formatHHMMFromMinutes(cutoffMinutes)}`;
+            const dayCompareRangeText = `Compared: ${dayRangeCurrent} vs ${dayRangePrevious}`;
+
+            const dailyConsumptionValues = getMeterValues(trendDailyEnergyData.value, 'Consumption');
+            const currentWeekStart = getStartOfWeekValue(focusDate);
+            const previousWeekStart = shiftDateValue(currentWeekStart, -7);
+            const weekSpan = getInclusiveDaySpan(currentWeekStart, focusDate);
+            const previousWeekEnd = shiftDateValue(previousWeekStart, weekSpan - 1);
+            const currentWeekConsumption = sumEnergyValuesByDateRange(dailyConsumptionValues, currentWeekStart, focusDate);
+            const previousWeekConsumption = sumEnergyValuesByDateRange(dailyConsumptionValues, previousWeekStart, previousWeekEnd);
+            const weekCompareRangeText = `Compared: ${formatDisplayDate(currentWeekStart)}–${formatDisplayDate(focusDate)} vs ${formatDisplayDate(previousWeekStart)}–${formatDisplayDate(previousWeekEnd)}`;
+
+            const currentMonthStart = getStartOfMonthValue(focusDate);
+            const focusDayOfMonth = Number(focusDate.slice(8, 10));
+            const previousMonthReference = shiftMonthValue(currentMonthStart, -1);
+            const previousMonthStart = getStartOfMonthValue(previousMonthReference);
+            const previousMonthEndDate = new Date(`${shiftMonthValue(previousMonthStart, 1)}T00:00:00`);
+            previousMonthEndDate.setDate(0);
+            const previousMonthLastDay = previousMonthEndDate.getDate();
+            const previousMonthEnd = shiftDateValue(previousMonthStart, Math.min(focusDayOfMonth, previousMonthLastDay) - 1);
+            const currentMonthConsumption = sumEnergyValuesByDateRange(dailyConsumptionValues, currentMonthStart, focusDate);
+            const previousMonthConsumption = sumEnergyValuesByDateRange(dailyConsumptionValues, previousMonthStart, previousMonthEnd);
+            const monthCompareRangeText = `Compared: ${formatDisplayDate(currentMonthStart)}–${formatDisplayDate(focusDate)} vs ${formatDisplayDate(previousMonthStart)}–${formatDisplayDate(previousMonthEnd)}`;
+            const lifetimeConsumption = sumEnergyValues(
+                getMeterValues(lifetimeConsumptionData.value, 'Consumption')
+            );
+
+            consumptionSummary.value = {
+                todayText: formatEnergy(currentDayConsumption),
+                monthText: formatEnergyMWh(currentMonthConsumption),
+                lifetimeText: formatEnergyMWh(lifetimeConsumption)
+            };
+
+            consumptionTrendCards.value = [
+                buildTrendCard({
+                    key: 'daily',
+                    title: 'Today',
+                    compareLabel: 'yesterday at the same time',
+                    compareRangeText: dayCompareRangeText,
+                    currentValue: currentDayConsumption,
+                    previousValue: previousDayConsumption,
+                    formatter: formatEnergy
+                }),
+                buildTrendCard({
+                    key: 'weekly',
+                    title: 'This Week',
+                    compareLabel: 'last week',
+                    compareRangeText: weekCompareRangeText,
+                    currentValue: currentWeekConsumption,
+                    previousValue: previousWeekConsumption,
+                    formatter: formatEnergy
+                }),
+                buildTrendCard({
+                    key: 'monthly',
+                    title: 'This Month',
+                    compareLabel: 'last month',
+                    compareRangeText: monthCompareRangeText,
+                    currentValue: currentMonthConsumption,
+                    previousValue: previousMonthConsumption,
+                    formatter: formatEnergyMWh
+                })
+            ];
+        };
+
+        const getFocusDate = () => selectedRangeEnd.value || selectedRangeStart.value || getTodayDate();
+
+        const shouldAutoRefreshDashboard = () => {
+            return activeTab.value === 'dashboard' && getFocusDate() === getTodayDate();
+        };
+
+        const shouldAutoRefreshPowerFlow = () => {
+            return activeTab.value === 'dashboard';
+        };
+
+        const getDelayUntilNextQuarterRefresh = () => {
+            const now = new Date();
+            const next = new Date(now);
+            const currentMinutes = now.getMinutes();
+            const nextQuarter = Math.floor(currentMinutes / 15) * 15 + 15;
+
+            if (nextQuarter >= 60) {
+                next.setHours(now.getHours() + 1, 0, 20, 0);
+            } else {
+                next.setMinutes(nextQuarter, 20, 0);
+            }
+
+            return Math.max(30 * 1000, next.getTime() - now.getTime());
+        };
+
+        const getDelayUntilNext8AMRefresh = () => {
+            const now = new Date();
+            const next = new Date(now);
+            next.setHours(8, 0, 20, 0);
+
+            if (next.getTime() <= now.getTime()) {
+                next.setDate(next.getDate() + 1);
+            }
+
+            return Math.max(30 * 1000, next.getTime() - now.getTime());
+        };
+
+        const clearDashboardAutoRefresh = () => {
+            if (realtimeRefreshTimer) {
+                clearTimeout(realtimeRefreshTimer);
+                realtimeRefreshTimer = null;
+            }
+            if (trendSummaryRefreshTimer) {
+                clearTimeout(trendSummaryRefreshTimer);
+                trendSummaryRefreshTimer = null;
+            }
+        };
+
+        const clearPowerFlowAutoRefresh = () => {
+            if (powerFlowRefreshTimer) {
+                clearTimeout(powerFlowRefreshTimer);
+                powerFlowRefreshTimer = null;
+            }
+        };
+
+        const setPowerFlowFromApi = (d) => {
+            const rawFlow = d.siteCurrentPowerFlow || {};
+            return { unit: rawFlow.unit, pv: rawFlow.PV || {}, grid: rawFlow.GRID || {}, load: rawFlow.LOAD || {}, connections: rawFlow.connections || [] };
+        };
+
+        const refreshPowerFlowOnly = async () => {
+            try {
+                const d = await SolarAPI.getPowerFlow();
+                if (d) {
+                    powerFlow.value = setPowerFlowFromApi(d);
+                    powerFlowUpdatedAt.value = new Date();
+                }
+            } catch (error) {
+                if (error?.message?.includes('limit') || error?.message?.includes('rate limited')) {
+                    connectionStatus.value = 'throttled';
+                }
+            }
+        };
+
+        const schedulePowerFlowAutoRefresh = () => {
+            clearPowerFlowAutoRefresh();
+            if (!shouldAutoRefreshPowerFlow()) return;
+
+            powerFlowRefreshTimer = setTimeout(async () => {
+                await refreshPowerFlowOnly();
+                schedulePowerFlowAutoRefresh();
+            }, 60 * 1000);
+        };
+
+        const scheduleDashboardAutoRefresh = () => {
+            clearDashboardAutoRefresh();
+            if (!shouldAutoRefreshDashboard()) return;
+
+            realtimeRefreshTimer = setTimeout(async () => {
+                await loadRealtimeDashboardData();
+                scheduleDashboardAutoRefresh();
+            }, getDelayUntilNextQuarterRefresh());
+
+            trendSummaryRefreshTimer = setTimeout(async () => {
+                await loadDashboardData();
+                scheduleDashboardAutoRefresh();
+            }, getDelayUntilNext8AMRefresh());
         };
 
         const generateMocks = () => {
@@ -163,6 +468,51 @@ createApp({
                     connections: [{ from: 'PV', to: 'LOAD' }, { from: 'GRID', to: 'LOAD' }]
                 };
             }
+            if (consumptionTrendCards.value.length === 0) {
+                consumptionSummary.value = {
+                    todayText: '468.2 KWh',
+                    monthText: '0.4 MWh',
+                    lifetimeText: '5,025.9 MWh'
+                };
+                consumptionTrendCards.value = [
+                    {
+                        key: 'daily',
+                        title: 'Today',
+                        compareLabel: 'yesterday at the same time',
+                        compareRangeText: 'Compared: 10-Jul-2026 00:00–09:00 vs 09-Jul-2026 00:00–09:00',
+                        currentText: '468.2 KWh',
+                        previousText: '432.5 KWh',
+                        deltaText: '+35.7 KWh',
+                        statusText: '+8.2%',
+                        summary: 'Higher than yesterday at the same time',
+                        direction: 'up'
+                    },
+                    {
+                        key: 'weekly',
+                        title: 'This Week',
+                        compareLabel: 'last week',
+                        compareRangeText: 'Compared: 07-Jul-2026–10-Jul-2026 vs 30-Jun-2026–03-Jul-2026',
+                        currentText: '2,984.0 KWh',
+                        previousText: '3,102.0 KWh',
+                        deltaText: '-118.0 KWh',
+                        statusText: '-3.8%',
+                        summary: 'Lower than last week',
+                        direction: 'down'
+                    },
+                    {
+                        key: 'monthly',
+                        title: 'This Month',
+                        compareLabel: 'last month',
+                        compareRangeText: 'Compared: 01-Jul-2026–10-Jul-2026 vs 01-Jun-2026–10-Jun-2026',
+                        currentText: '0.42 MWh',
+                        previousText: '0.39 MWh',
+                        deltaText: '+0.03 MWh',
+                        statusText: '+7.6%',
+                        summary: 'Higher than last month',
+                        direction: 'up'
+                    }
+                ];
+            }
             if (!powerDetailsData.value.powerDetails) {
                 const focusDate = selectedRangeEnd.value || selectedRangeStart.value || getTodayDate();
                 const vP = []; const vC = []; const vB = [];
@@ -174,6 +524,58 @@ createApp({
                 }
                 powerDetailsData.value = { powerDetails: { meters: [{ type: 'Production', values: vP }, { type: 'Consumption', values: vC }, { type: 'Purchased', values: vB }] } };
             }
+        };
+
+        const loadRealtimeDashboardData = async () => {
+            let hasError = false;
+            let isThrottled = false;
+
+            const updateData = async (task, targetRef, processFn) => {
+                try {
+                    const data = await task();
+                    if (data) targetRef.value = processFn ? processFn(data) : data;
+                } catch (error) {
+                    if (error.message.includes('limit') || error.message.includes('rate limited')) isThrottled = true;
+                    else { console.error(`Error loading data:`, error); hasError = true; }
+                }
+            };
+
+            const rangeStart = selectedRangeStart.value || getTodayDate();
+            const rangeEnd = selectedRangeEnd.value || rangeStart;
+            const focusDate = rangeEnd;
+            const startTime = `${focusDate} 00:00:00`;
+            const endTime = `${focusDate} 23:59:59`;
+            const previousDayDate = shiftDateValue(focusDate, -1);
+
+            await Promise.allSettled([
+                updateData(() => SolarAPI.getOverview(), overview, d => d.overview || {}),
+                updateData(async () => {
+                    const d = await SolarAPI.getPowerFlow();
+                    powerFlowUpdatedAt.value = new Date();
+                    return d;
+                }, powerFlow, setPowerFlowFromApi),
+                updateData(() => SolarAPI.getEnvBenefits(), envBenefits, d => d.envBenefits || {}),
+                updateData(() => SolarAPI.getInventory(), inventory, d => d.Inventory || { inverters: [] }),
+                updateData(() => SolarAPI.getPowerDetails(startTime, endTime), powerDetailsData),
+                updateData(() => SolarAPI.getPowerDetails(`${previousDayDate} 00:00:00`, `${previousDayDate} 23:59:59`), previousDayPowerDetails)
+            ]);
+
+            if (isThrottled) {
+                connectionStatus.value = 'throttled';
+                if (Object.keys(overview.value).length === 0 || !powerDetailsData.value.powerDetails) {
+                    generateMocks();
+                    isDemoMode.value = true;
+                }
+            } else if (hasError) {
+                connectionStatus.value = 'offline';
+            } else {
+                connectionStatus.value = 'online';
+                isDemoMode.value = false;
+            }
+
+            computeConsumptionTrends(focusDate);
+            lastUpdateTime.value = formatTimestamp();
+            if (activeTab.value === 'dashboard') nextTick(() => initDashboardCharts());
         };
 
         const loadDashboardData = async () => {
@@ -204,18 +606,34 @@ createApp({
             const start30d = formatDateValue(date30d);
             const start12m = formatDateValue(date12m);
             const rangeEndTime = `${rangeEnd} 23:59:59`;
+            const previousDayDate = shiftDateValue(focusDate, -1);
+            const trendDailyStart = shiftDateValue(rangeEnd, -62);
+
+            try {
+                const periodData = await SolarAPI.getDataPeriod();
+                dataPeriod.value = periodData;
+            } catch (error) {
+                if (error.message.includes('limit') || error.message.includes('rate limited')) isThrottled = true;
+                else { console.error(`Error loading data:`, error); hasError = true; }
+            }
+
+            const lifetimeStart = dataPeriod.value?.dataPeriod?.startDate || focusDate;
 
             await Promise.allSettled([
                 updateData(() => SolarAPI.getOverview(), overview, d => d.overview || {}),
-                updateData(() => SolarAPI.getPowerFlow(), powerFlow, d => {
-                    const rawFlow = d.siteCurrentPowerFlow || {};
-                    return { unit: rawFlow.unit, pv: rawFlow.PV || {}, grid: rawFlow.GRID || {}, load: rawFlow.LOAD || {}, connections: rawFlow.connections || [] };
-                }),
+                updateData(async () => {
+                    const d = await SolarAPI.getPowerFlow();
+                    powerFlowUpdatedAt.value = new Date();
+                    return d;
+                }, powerFlow, setPowerFlowFromApi),
                 updateData(() => SolarAPI.getEnvBenefits(), envBenefits, d => d.envBenefits || {}),
                 updateData(() => SolarAPI.getInventory(), inventory, d => d.Inventory || { inverters: [] }),
                 updateData(() => SolarAPI.getPowerDetails(startTime, endTime), powerDetailsData),
+                updateData(() => SolarAPI.getPowerDetails(`${previousDayDate} 00:00:00`, `${previousDayDate} 23:59:59`), previousDayPowerDetails),
                 updateData(() => SolarAPI.getEnergy(`${start30d} 00:00:00`, rangeEndTime, 'DAY'), energyData30D, d => d.energyDetails?.meters || []),
-                updateData(() => SolarAPI.getEnergy(`${start12m} 00:00:00`, rangeEndTime, 'MONTH'), energyData12M, d => d.energyDetails?.meters || [])
+                updateData(() => SolarAPI.getEnergy(`${start12m} 00:00:00`, rangeEndTime, 'MONTH'), energyData12M, d => d.energyDetails?.meters || []),
+                updateData(() => SolarAPI.getEnergy(`${trendDailyStart} 00:00:00`, rangeEndTime, 'DAY'), trendDailyEnergyData, d => d.energyDetails?.meters || []),
+                updateData(() => SolarAPI.getEnergy(`${lifetimeStart} 00:00:00`, rangeEndTime, 'MONTH'), lifetimeConsumptionData, d => d.energyDetails?.meters || [])
             ]);
 
             isDemoMode.value = false;
@@ -228,6 +646,7 @@ createApp({
             } else if (hasError) connectionStatus.value = 'offline';
             else connectionStatus.value = 'online';
 
+            computeConsumptionTrends(focusDate);
             lastUpdateTime.value = formatTimestamp();
             if (activeTab.value === 'dashboard') nextTick(() => initDashboardCharts());
         };
@@ -465,12 +884,15 @@ createApp({
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             });
             else if (typeof lucide !== 'undefined') lucide.createIcons();
+            scheduleDashboardAutoRefresh();
+            schedulePowerFlowAutoRefresh();
         });
 
         watch([selectedRangeStart, selectedRangeEnd], ([newStart, newEnd], [oldStart, oldEnd]) => {
             if (!newStart || !newEnd) return;
             if (newStart === oldStart && newEnd === oldEnd) return;
             loadDashboardData();
+            scheduleDashboardAutoRefresh();
         });
 
         watch(showCloseConfirm, (isVisible) => {
@@ -510,6 +932,8 @@ createApp({
                 const loader = document.getElementById('loading-screen');
                 if (loader) setTimeout(() => loader.classList.add('hidden'), 500);
                 if (typeof lucide !== 'undefined') lucide.createIcons();
+                scheduleDashboardAutoRefresh();
+                schedulePowerFlowAutoRefresh();
             });
             if (typeof lucide !== 'undefined') lucide.createIcons();
             const dateInput = document.querySelector(".hidden-date-input");
@@ -527,7 +951,6 @@ createApp({
                     }
                 });
             }
-            setInterval(loadDashboardData, 15 * 60 * 1000);
             window.addEventListener('resize', handleWindowResize);
             document.addEventListener('fullscreenchange', () => {
                 window.dispatchEvent(new Event('resize'));
@@ -540,14 +963,19 @@ createApp({
             });
         });
 
+        onUnmounted(() => {
+            clearDashboardAutoRefresh();
+            clearPowerFlowAutoRefresh();
+        });
+
         return {
             activeTab, connectionStatus, connectionStatusText,
             overview, powerFlow, envBenefits, inventory,
             chartDays, selectedRangeStart, selectedRangeEnd, selectedRangeLabel, lastUpdateTime,
             formatPower, formatEnergy, formatEnergyMWh, formatCo2, formatRevenue,
-            flowSpeeds, inverterStatusSummary,
+            flowSpeeds, inverterStatusSummary, consumptionTrendCards, consumptionSummary,
             loadDashboardData, forceRefresh, isDemoMode,
-            formattedSelectedDate, toggleFullScreen,
+            formattedSelectedDate, toggleFullScreen, powerFlowUpdatedAtText,
             showCloseConfirm, openCloseConfirm, cancelCloseConfirm, confirmCloseApp
         };
     }

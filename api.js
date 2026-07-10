@@ -92,6 +92,10 @@ const SolarAPI = {
         return this.fetch('overview');
     },
 
+    getDataPeriod() {
+        return this.fetch('dataPeriod');
+    },
+
     getPower(startTime, endTime) {
         return this.fetch('power', { startTime, endTime });
     },
@@ -101,7 +105,7 @@ const SolarAPI = {
             startTime,
             endTime,
             timeUnit,
-            meters: 'PRODUCTION,PURCHASED'
+            meters: 'PRODUCTION,PURCHASED,CONSUMPTION'
         });
     },
 

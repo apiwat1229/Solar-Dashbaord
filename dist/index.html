@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,9 +15,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <link rel="icon" href="data:,">
-  <script type="module" crossorigin src="./assets/index-pwF9zpWI.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-BWmkwxbE.css">
+  <script type="module" crossorigin src="./assets/index-BPOLAtUo.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-ClUYZjiG.css">
 </head>
+
 <body class="light-theme">
     <!-- Loading Screen -->
     <div id="loading-screen">
@@ -33,11 +35,11 @@
                     <div class="logo-text">
                         <span class="brand">SOLAR</span>
                         <span class="model">DASHBOARD</span>
-                        <span class="location">Y.T Rubber</span>
+                        <span class="location">Y.T. Rubber Co., Ltd.</span>
                     </div>
                 </div>
             </div>
-            
+
             <div class="header-center">
                 <!-- Center content if needed -->
             </div>
@@ -45,18 +47,26 @@
             <div class="header-right">
                 <div class="header-info-pill" :class="{ 'warning': connectionStatus === 'throttled' }">
                     <span v-if="isDemoMode" class="demo-badge">Simulation</span>
-                    <div class="status-dot" :class="{ 'active': connectionStatus === 'online', 'blink': connectionStatus === 'online', 'throttled': connectionStatus === 'throttled' }"></div>
+                    <div class="status-dot"
+                        :class="{ 'active': connectionStatus === 'online', 'blink': connectionStatus === 'online', 'throttled': connectionStatus === 'throttled' }">
+                    </div>
                     <span class="status-text">{{ connectionStatusText }}</span>
-                    <button v-if="connectionStatus === 'throttled'" @click="forceRefresh" class="header-action-btn" title="Force Refresh">
+                    <button v-if="connectionStatus === 'throttled'" @click="forceRefresh" class="header-action-btn"
+                        title="Force Refresh">
                         <i data-lucide="refresh-cw"></i>
                     </button>
                     <span class="update-time">Update: {{ lastUpdateTime }}</span>
                 </div>
-                
+
                 <div class="header-info-pill navbar-date-picker">
-                    <i data-lucide="calendar" class="header-icon"></i>
-                    <span>{{ formattedSelectedDate }}</span>
-                    <input type="text" class="hidden-date-input">
+                    <div class="date-picker-trigger">
+                        <i data-lucide="calendar" class="header-icon"></i>
+                        <div class="date-picker-copy">
+                            <span class="date-picker-label">{{ selectedRangeLabel }}</span>
+                            <span class="date-picker-value">{{ formattedSelectedDate }}</span>
+                        </div>
+                        <input type="text" class="hidden-date-input">
+                    </div>
                 </div>
 
                 <div class="window-controls">
@@ -69,7 +79,7 @@
                     <button id="btn-reload" class="win-btn" title="Refresh">
                         <i data-lucide="refresh-cw"></i>
                     </button>
-                    <button id="btn-close" class="win-btn close-btn" title="Close">
+                    <button id="btn-close" class="win-btn close-btn" title="Close" @click="openCloseConfirm">
                         <i data-lucide="x"></i>
                     </button>
                 </div>
@@ -90,8 +100,10 @@
                             <div class="title-group">
                                 <h3>Daily Power and Energy</h3>
                                 <div class="chart-legend">
-                                    <div class="legend-item"><span class="dot" style="background-color: #f2726f;"></span> CONSUMPTION</div>
-                                    <div class="legend-item"><span class="dot" style="background-color: #5fbcd3;"></span> FROM SOLAR CELL</div>
+                                    <div class="legend-item"><span class="dot"
+                                            style="background-color: #f2726f;"></span> CONSUMPTION</div>
+                                    <div class="legend-item"><span class="dot"
+                                            style="background-color: #5fbcd3;"></span> FROM SOLAR CELL</div>
                                 </div>
                                 <!-- Date Selector Removed -->
 
@@ -107,80 +119,88 @@
                         <div class="card-header">
                             <div class="title-group">
                                 <h3>Real-time Power Flow</h3>
+                                <span class="powerflow-updated">อัปเดต: {{ powerFlowUpdatedAtText }}</span>
                             </div>
                         </div>
                         <div class="flow-container">
-                            <svg class="flow-svg" viewBox="0 0 400 400">
-                                <!-- Paths (SVG Coordinates) -->
-                                <path id="solar-to-inverter" d="M 80 80 L 200 80 L 200 170" class="flow-path" />
-                                <path id="grid-to-inverter" d="M 320 80 L 200 80 L 200 170" class="flow-path" />
-                                <path id="inverter-to-load" d="M 200 240 L 200 330" class="flow-path" />
-
-                                <!-- Flowing Dots -->
-                                <circle r="3" class="flow-dot solar" v-if="powerFlow.pv?.currentPower > 0">
-                                    <animateMotion :dur="flowSpeeds.solar" repeatCount="indefinite" path="M 80 80 L 200 80 L 200 170" />
-                                </circle>
-                                <circle r="3" class="flow-dot grid" v-if="powerFlow.grid?.currentPower > 0">
-                                    <animateMotion :dur="flowSpeeds.grid" repeatCount="indefinite" path="M 320 80 L 200 80 L 200 170" />
-                                </circle>
-                                <circle r="3" class="flow-dot load" v-if="powerFlow.load?.currentPower > 0">
-                                    <animateMotion :dur="flowSpeeds.load" repeatCount="indefinite" path="M 200 240 L 200 330" />
-                                </circle>
-
-                                <!-- Nodes using foreignObject for absolute coordinate mapping -->
-                                <foreignObject x="20" y="55" width="120" height="100">
-                                    <div xmlns="http://www.w3.org/1999/xhtml" class="node">
-                                        <div class="node-icon solar"><i data-lucide="sun"></i></div>
-                                        <div class="node-label">FROM SOLAR CELL</div>
-                                        <div class="node-v solar">{{ formatPower(powerFlow.pv?.currentPower, powerFlow.unit) }}</div>
+                            <div class="flow-data-list">
+                                <div class="flow-data-row solar">
+                                    <div class="flow-data-left">
+                                        <i data-lucide="sun" class="flow-data-icon"></i>
+                                        <span class="flow-data-label">From Solar Cell</span>
                                     </div>
-                                </foreignObject>
-
-                                <foreignObject x="270" y="55" width="100" height="100">
-                                    <div xmlns="http://www.w3.org/1999/xhtml" class="node">
-                                        <div class="node-icon grid"><i data-lucide="zap"></i></div>
-                                        <div class="node-label">FROM PEA</div>
-                                        <div class="node-v grid">{{ formatPower(powerFlow.grid?.currentPower, powerFlow.unit) }}</div>
+                                    <div class="flow-data-value solar">{{ formatPower(powerFlow.pv?.currentPower,
+                                        powerFlow.unit) }}</div>
+                                </div>
+                                <div class="flow-data-row grid">
+                                    <div class="flow-data-left">
+                                        <i data-lucide="zap" class="flow-data-icon"></i>
+                                        <span class="flow-data-label">From PEA</span>
                                     </div>
-                                </foreignObject>
-
-                                <foreignObject x="170" y="175" width="60" height="60">
-                                    <div xmlns="http://www.w3.org/1999/xhtml" class="node">
-                                        <div class="node-icon main glow"><i data-lucide="cpu"></i></div>
+                                    <div class="flow-data-value grid">{{ formatPower(powerFlow.grid?.currentPower,
+                                        powerFlow.unit) }}</div>
+                                </div>
+                                <div class="flow-data-row load">
+                                    <div class="flow-data-left">
+                                        <i data-lucide="home" class="flow-data-icon"></i>
+                                        <span class="flow-data-label">Consumption</span>
                                     </div>
-                                </foreignObject>
-
-                                <foreignObject x="150" y="305" width="100" height="100">
-                                    <div xmlns="http://www.w3.org/1999/xhtml" class="node">
-                                        <div class="node-icon load"><i data-lucide="home"></i></div>
-                                        <div class="node-label">CONSUMPTION</div>
-                                        <div class="node-v load">{{ formatPower(powerFlow.load?.currentPower, powerFlow.unit) }}</div>
-                                    </div>
-                                </foreignObject>
-                            </svg>
+                                    <div class="flow-data-value load">{{ formatPower(powerFlow.load?.currentPower,
+                                        powerFlow.unit) }}</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="visual-footer-stats">
                             <div class="footer-stat today">
-                                <i data-lucide="zap" class="stat-icon"></i>
+                                <div class="stat-head">
+                                    <i data-lucide="zap" class="stat-icon"></i>
+                                    <span class="label">Consumption Today</span>
+                                </div>
                                 <div class="stat-content">
-                                    <span class="label">Today</span>
-                                    <span class="value">{{ formatEnergy(overview.lastDayData?.energy) }}</span>
+                                    <span class="value">{{ consumptionSummary.todayText }}</span>
                                 </div>
                             </div>
                             <div class="stat-divider"></div>
                             <div class="footer-stat month">
-                                <i data-lucide="calendar" class="stat-icon"></i>
+                                <div class="stat-head">
+                                    <i data-lucide="calendar" class="stat-icon"></i>
+                                    <span class="label">Consumption Month</span>
+                                </div>
                                 <div class="stat-content">
-                                    <span class="label">Month</span>
-                                    <span class="value">{{ formatEnergyMWh(overview.lastMonthData?.energy) }}</span>
+                                    <span class="value">{{ consumptionSummary.monthText }}</span>
                                 </div>
                             </div>
                             <div class="stat-divider"></div>
                             <div class="footer-stat lifetime">
-                                <i data-lucide="shield-check" class="stat-icon"></i>
+                                <div class="stat-head">
+                                    <i data-lucide="shield-check" class="stat-icon"></i>
+                                    <span class="label">Consumption Lifetime</span>
+                                </div>
                                 <div class="stat-content">
-                                    <span class="label">Lifetime</span>
-                                    <span class="value">{{ formatEnergyMWh(overview.lifeTimeData?.energy) }}</span>
+                                    <span class="value">{{ consumptionSummary.lifetimeText }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="trend-insights-section">
+                            <div class="trend-insights-header">
+                                <span class="trend-title-main">Consumption Trend</span>
+                                <span class="trend-title-sub">Compare current usage with the previous period</span>
+                            </div>
+                            <div class="trend-insights-grid">
+                                <div v-for="item in consumptionTrendCards" :key="item.key" class="trend-card"
+                                    :class="`trend-${item.direction}`">
+                                    <div class="trend-card-header">
+                                        <span class="trend-card-title">{{ item.title }}</span>
+                                        <span class="trend-pill" :class="`trend-${item.direction}`">{{ item.statusText
+                                            }}</span>
+                                    </div>
+                                    <div class="trend-card-value">{{ item.currentText }}</div>
+                                    <div class="trend-card-summary">{{ item.summary }}</div>
+                                    <div v-if="item.compareRangeText" class="trend-card-meta">{{ item.compareRangeText
+                                        }}</div>
+                                    <div v-if="item.deltaText && item.deltaText !== '-'" class="trend-card-delta">
+                                        Difference: {{ item.deltaText }}</div>
+                                    <div class="trend-card-compare">Previous: {{ item.previousText }}</div>
                                 </div>
                             </div>
                         </div>
@@ -225,7 +245,23 @@
 
             <!-- Equipment Content -->
         </main>
+
+        <transition name="modal-fade">
+            <div v-if="showCloseConfirm" class="confirm-modal-backdrop" @click.self="cancelCloseConfirm">
+                <div class="confirm-modal">
+                    <div class="confirm-modal-content">
+                        <h3>Close Solar Dashboard?</h3>
+                        <p>Your current dashboard view will be closed. You can reopen the app anytime.</p>
+                    </div>
+                    <div class="confirm-modal-actions">
+                        <button class="modal-btn secondary" @click="cancelCloseConfirm">Keep Working</button>
+                        <button class="modal-btn danger" @click="confirmCloseApp">Close App</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
     </div>
 
 </body>
+
 </html>

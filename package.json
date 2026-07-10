@@ -20,6 +20,7 @@
     "files": [
       "dist/**/*",
       "main.js",
+      "preload.js",
       "package.json"
     ],
     "win": {
