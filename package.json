@@ -5,10 +5,10 @@
   "type": "module",
   "main": "main.js",
   "scripts": {
-    "dev": "npx concurrently \"vite --open\" \"npx wait-on tcp:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev": "npx concurrently \"vite --open\" \"npx wait-on tcp:5173 && cross-env NODE_ENV=development electron --disable-gpu .\"",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "electron .",
+    "start": "electron --disable-gpu .",
     "dist": "vite build && electron-builder"
   },
   "build": {
@@ -27,8 +27,11 @@
     }
   },
   "devDependencies": {
-    "electron": "^28.0.0",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^28.3.3",
     "electron-builder": "^26.7.0",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "wait-on": "^9.0.10"
   }
 }

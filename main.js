@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -35,17 +35,7 @@ function createWindow() {
         else win.maximize();
     });
 
-    ipcMain.on('window-close', async () => {
-        const result = await dialog.showMessageBox(win, {
-            type: 'question',
-            buttons: ['Yes', 'No'],
-            title: 'Confirm Exit',
-            message: 'Are you sure you want to close Solar Dashboard?',
-            defaultId: 1,
-            cancelId: 1
-        });
-        if (result.response === 0) win.close();
-    });
+    ipcMain.on('window-close', () => win.close());
 
     ipcMain.on('window-reload', () => win.webContents.reloadIgnoringCache());
 }

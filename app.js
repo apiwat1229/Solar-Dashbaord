@@ -10,11 +10,23 @@ createApp({
         const envBenefits = ref({});
         const inventory = ref({ inverters: [] });
         const chartDays = ref(1);
-        const selectedDate = ref(new Date().toISOString().split('T')[0]);
+
+        const formatDateValue = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const displayMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const getTodayDate = () => formatDateValue(new Date());
+
+        const selectedRangeStart = ref(getTodayDate());
+        const selectedRangeEnd = ref(getTodayDate());
 
         const formatTimestamp = () => {
             const now = new Date();
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const months = displayMonths;
             const day = String(now.getDate()).padStart(2, '0');
             const month = months[now.getMonth()];
             const year = now.getFullYear();
@@ -23,14 +35,29 @@ createApp({
         };
         const lastUpdateTime = ref(formatTimestamp());
 
-        const formattedSelectedDate = computed(() => {
-            if (!selectedDate.value) return '';
-            const date = new Date(selectedDate.value);
+        const formatDisplayDate = (dateStr) => {
+            if (!dateStr) return '';
+            const date = new Date(`${dateStr}T00:00:00`);
             const day = String(date.getDate()).padStart(2, '0');
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const month = months[date.getMonth()];
+            const month = displayMonths[date.getMonth()];
             const year = date.getFullYear();
             return `${day}-${month}-${year}`;
+        };
+
+        const formattedSelectedDate = computed(() => {
+            if (!selectedRangeStart.value || !selectedRangeEnd.value) return '';
+            if (selectedRangeStart.value === selectedRangeEnd.value) {
+                return formatDisplayDate(selectedRangeStart.value);
+            }
+            return `${formatDisplayDate(selectedRangeStart.value)} - ${formatDisplayDate(selectedRangeEnd.value)}`;
+        });
+
+        const selectedRangeLabel = computed(() => {
+            if (!selectedRangeStart.value || !selectedRangeEnd.value) return '';
+            if (selectedRangeStart.value === selectedRangeEnd.value) {
+                return '';
+            }
+            return 'Date Range';
         });
 
         const connectionStatusText = computed(() => {
@@ -101,6 +128,24 @@ createApp({
         const energyData30D = ref([]);
         const energyData12M = ref([]);
         const isDemoMode = ref(false);
+        const showCloseConfirm = ref(false);
+        let datePickerInstance = null;
+
+        const applyDateRange = (startDate, endDate = startDate) => {
+            selectedRangeStart.value = startDate;
+            selectedRangeEnd.value = endDate || startDate;
+            if (datePickerInstance) {
+                datePickerInstance.setDate([selectedRangeStart.value, selectedRangeEnd.value], false);
+            }
+        };
+
+        const syncDateRangeFromPicker = (selectedDates) => {
+            if (!selectedDates || selectedDates.length === 0) return;
+            const startDate = formatDateValue(selectedDates[0]);
+            const endDate = formatDateValue(selectedDates[selectedDates.length - 1] || selectedDates[0]);
+            selectedRangeStart.value = startDate;
+            selectedRangeEnd.value = endDate;
+        };
 
         const generateMocks = () => {
             if (Object.keys(overview.value).length === 0) {
@@ -119,10 +164,10 @@ createApp({
                 };
             }
             if (!powerDetailsData.value.powerDetails) {
-                const now = new Date();
+                const focusDate = selectedRangeEnd.value || selectedRangeStart.value || getTodayDate();
                 const vP = []; const vC = []; const vB = [];
                 for (let i = 0; i < 96; i++) {
-                    const timeStr = `${selectedDate.value} ${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}:00`;
+                    const timeStr = `${focusDate} ${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}:00`;
                     const prod = i > 28 && i < 68 ? (Math.sin((i - 28) / 40 * Math.PI) * 7000) : 0;
                     const load = 1500 + Math.random() * 2000;
                     vP.push({ date: timeStr, value: prod }); vC.push({ date: timeStr, value: load }); vB.push({ date: timeStr, value: Math.max(0, load - prod) });
@@ -145,14 +190,20 @@ createApp({
                 }
             };
 
-            const today = selectedDate.value;
-            const startTime = `${today} 00:00:00`;
-            const endTime = `${today} 23:59:59`;
-
-            const date30d = new Date(); date30d.setDate(date30d.getDate() - 29);
-            const date12m = new Date(); date12m.setMonth(date12m.getMonth() - 11);
-            const start30d = date30d.toISOString().split('T')[0];
-            const start12m = date12m.toISOString().split('T')[0].substring(0, 7) + '-01';
+            const rangeStart = selectedRangeStart.value || getTodayDate();
+            const rangeEnd = selectedRangeEnd.value || rangeStart;
+            const focusDate = rangeEnd;
+            const startTime = `${focusDate} 00:00:00`;
+            const endTime = `${focusDate} 23:59:59`;
+            const rangeEndDate = new Date(`${rangeEnd}T00:00:00`);
+            const date30d = new Date(rangeEndDate);
+            date30d.setDate(date30d.getDate() - 29);
+            const date12m = new Date(rangeEndDate);
+            date12m.setMonth(date12m.getMonth() - 11);
+            date12m.setDate(1);
+            const start30d = formatDateValue(date30d);
+            const start12m = formatDateValue(date12m);
+            const rangeEndTime = `${rangeEnd} 23:59:59`;
 
             await Promise.allSettled([
                 updateData(() => SolarAPI.getOverview(), overview, d => d.overview || {}),
@@ -163,8 +214,8 @@ createApp({
                 updateData(() => SolarAPI.getEnvBenefits(), envBenefits, d => d.envBenefits || {}),
                 updateData(() => SolarAPI.getInventory(), inventory, d => d.Inventory || { inverters: [] }),
                 updateData(() => SolarAPI.getPowerDetails(startTime, endTime), powerDetailsData),
-                updateData(() => SolarAPI.getEnergy(start30d + ' 00:00:00', today + ' 23:59:59', 'DAY'), energyData30D, d => d.energyDetails?.meters || []),
-                updateData(() => SolarAPI.getEnergy(start12m + ' 00:00:00', today + ' 23:59:59', 'MONTH'), energyData12M, d => d.energyDetails?.meters || [])
+                updateData(() => SolarAPI.getEnergy(`${start30d} 00:00:00`, rangeEndTime, 'DAY'), energyData30D, d => d.energyDetails?.meters || []),
+                updateData(() => SolarAPI.getEnergy(`${start12m} 00:00:00`, rangeEndTime, 'MONTH'), energyData12M, d => d.energyDetails?.meters || [])
             ]);
 
             isDemoMode.value = false;
@@ -186,9 +237,23 @@ createApp({
             loadDashboardData();
         };
 
+        const openCloseConfirm = () => {
+            showCloseConfirm.value = true;
+        };
+
+        const cancelCloseConfirm = () => {
+            showCloseConfirm.value = false;
+        };
+
+        const confirmCloseApp = () => {
+            showCloseConfirm.value = false;
+            if (window.electronAPI) window.electronAPI.close();
+        };
+
         let areaChart = null;
         let dailyBarChart = null;
         let monthlyBarChart = null;
+        let resizeTimer = null;
 
         const initDashboardCharts = async () => {
             const areaCtx = document.getElementById('dailyAreaChart');
@@ -402,17 +467,25 @@ createApp({
             else if (typeof lucide !== 'undefined') lucide.createIcons();
         });
 
-        watch(selectedDate, () => loadDashboardData());
+        watch([selectedRangeStart, selectedRangeEnd], ([newStart, newEnd], [oldStart, oldEnd]) => {
+            if (!newStart || !newEnd) return;
+            if (newStart === oldStart && newEnd === oldEnd) return;
+            loadDashboardData();
+        });
+
+        watch(showCloseConfirm, (isVisible) => {
+            if (isVisible && typeof lucide !== 'undefined') {
+                nextTick(() => lucide.createIcons());
+            }
+        });
 
         const setupWindowControls = () => {
             if (window.electronAPI) {
                 const minimizeBtn = document.getElementById('btn-minimize');
                 const maximizeBtn = document.getElementById('btn-maximize');
-                const closeBtn = document.getElementById('btn-close');
                 const reloadBtn = document.getElementById('btn-reload');
                 if (minimizeBtn) minimizeBtn.addEventListener('click', () => window.electronAPI.minimize());
                 if (maximizeBtn) maximizeBtn.addEventListener('click', () => window.electronAPI.toggleMaximize());
-                if (closeBtn) closeBtn.addEventListener('click', () => window.electronAPI.close());
                 if (reloadBtn) reloadBtn.addEventListener('click', () => window.electronAPI.reload());
             }
         };
@@ -420,6 +493,15 @@ createApp({
         const toggleFullScreen = () => {
             if (!document.fullscreenElement) document.documentElement.requestFullscreen();
             else if (document.exitFullscreen) document.exitFullscreen();
+        };
+
+        const handleWindowResize = () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                if (activeTab.value === 'dashboard') {
+                    initDashboardCharts();
+                }
+            }, 120);
         };
 
         onMounted(() => {
@@ -430,25 +512,43 @@ createApp({
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             });
             if (typeof lucide !== 'undefined') lucide.createIcons();
-            flatpickr(".hidden-date-input", {
-                dateFormat: "Y-m-d", defaultDate: selectedDate.value, disableMobile: true,
-                onChange: (selectedDates, dateStr) => { selectedDate.value = dateStr; }
-            });
+            const dateInput = document.querySelector(".hidden-date-input");
+            if (dateInput) {
+                datePickerInstance = flatpickr(dateInput, {
+                    mode: "range",
+                    dateFormat: "Y-m-d",
+                    defaultDate: [selectedRangeStart.value, selectedRangeEnd.value],
+                    disableMobile: true,
+                    onOpen: (_, __, instance) => {
+                        instance.jumpToDate(getTodayDate());
+                    },
+                    onChange: (selectedDates) => {
+                        syncDateRangeFromPicker(selectedDates);
+                    }
+                });
+            }
             setInterval(loadDashboardData, 15 * 60 * 1000);
+            window.addEventListener('resize', handleWindowResize);
             document.addEventListener('fullscreenchange', () => {
                 window.dispatchEvent(new Event('resize'));
                 setTimeout(() => initDashboardCharts(), 100);
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && showCloseConfirm.value) {
+                    cancelCloseConfirm();
+                }
             });
         });
 
         return {
             activeTab, connectionStatus, connectionStatusText,
             overview, powerFlow, envBenefits, inventory,
-            chartDays, selectedDate, lastUpdateTime,
+            chartDays, selectedRangeStart, selectedRangeEnd, selectedRangeLabel, lastUpdateTime,
             formatPower, formatEnergy, formatEnergyMWh, formatCo2, formatRevenue,
             flowSpeeds, inverterStatusSummary,
             loadDashboardData, forceRefresh, isDemoMode,
-            formattedSelectedDate, toggleFullScreen
+            formattedSelectedDate, toggleFullScreen,
+            showCloseConfirm, openCloseConfirm, cancelCloseConfirm, confirmCloseApp
         };
     }
 }).mount('#app');
