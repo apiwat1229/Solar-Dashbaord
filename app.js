@@ -907,12 +907,16 @@ createApp({
                 const maximizeBtn = document.getElementById('btn-maximize');
                 const reloadBtn = document.getElementById('btn-reload');
                 if (minimizeBtn) minimizeBtn.addEventListener('click', () => window.electronAPI.minimize());
-                if (maximizeBtn) maximizeBtn.addEventListener('click', () => window.electronAPI.toggleMaximize());
+                if (maximizeBtn) maximizeBtn.addEventListener('click', () => window.electronAPI.toggleFullscreen());
                 if (reloadBtn) reloadBtn.addEventListener('click', () => window.electronAPI.reload());
             }
         };
 
         const toggleFullScreen = () => {
+            if (window.electronAPI?.toggleFullscreen) {
+                window.electronAPI.toggleFullscreen();
+                return;
+            }
             if (!document.fullscreenElement) document.documentElement.requestFullscreen();
             else if (document.exitFullscreen) document.exitFullscreen();
         };

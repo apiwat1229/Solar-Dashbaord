@@ -72,7 +72,7 @@
                     <button id="btn-minimize" class="win-btn" title="Minimize">
                         <i data-lucide="minus"></i>
                     </button>
-                    <button id="btn-maximize" class="win-btn" title="Maximize">
+                    <button id="btn-maximize" class="win-btn" title="Fullscreen">
                         <i data-lucide="maximize"></i>
                     </button>
                     <button id="btn-reload" class="win-btn" title="Refresh">
@@ -187,7 +187,8 @@
                             </div>
                             <div class="trend-insights-grid">
                                 <div v-for="item in consumptionTrendCards" :key="item.key" class="trend-card"
-                                    :class="`trend-${item.direction}`">
+                                    :class="`trend-${item.direction}`"
+                                    :title="(item.compareRangeText || '') + ((item.deltaText && item.deltaText !== '-') ? (' | Difference: ' + item.deltaText) : '') + ((item.previousText && item.previousText !== '-') ? (' | Previous: ' + item.previousText) : '')">
                                     <div class="trend-card-header">
                                         <span class="trend-card-title">{{ item.title }}</span>
                                         <span class="trend-pill" :class="`trend-${item.direction}`">{{ item.statusText
@@ -195,11 +196,19 @@
                                     </div>
                                     <div class="trend-card-value">{{ item.currentText }}</div>
                                     <div class="trend-card-summary">{{ item.summary }}</div>
-                                    <div v-if="item.compareRangeText" class="trend-card-meta">{{ item.compareRangeText
+                                    <div v-if="item.key === 'daily' && item.compareRangeText" class="trend-card-meta">{{
+                                        item.compareRangeText
                                         }}</div>
-                                    <div v-if="item.deltaText && item.deltaText !== '-'" class="trend-card-delta">
+                                    <div v-if="item.key === 'daily' && item.deltaText && item.deltaText !== '-'"
+                                        class="trend-card-delta">
                                         Difference: {{ item.deltaText }}</div>
-                                    <div class="trend-card-compare">Previous: {{ item.previousText }}</div>
+                                    <div v-if="item.key === 'daily'" class="trend-card-compare">Previous: {{
+                                        item.previousText }}</div>
+                                    <div v-else class="trend-card-compare compact">
+                                        Prev: {{ item.previousText }}<span
+                                            v-if="item.deltaText && item.deltaText !== '-'">
+                                            • Diff: <span class="trend-diff-inline">{{ item.deltaText }}</span></span>
+                                    </div>
                                 </div>
                             </div>
                         </div>

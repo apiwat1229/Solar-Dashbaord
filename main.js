@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -7,12 +7,38 @@ const __dirname = path.dirname(__filename);
 
 const isDev = process.env.NODE_ENV === 'development';
 
+function getInitialWindowBounds() {
+    const { workAreaSize } = screen.getPrimaryDisplay();
+    const width = Math.min(workAreaSize.width, Math.max(1280, Math.floor(workAreaSize.width * 0.92)));
+    const height = Math.min(workAreaSize.height, Math.max(760, Math.floor(workAreaSize.height * 0.92)));
+
+    return { width, height };
+}
+
+function toggleImmersiveFullscreen(win) {
+    const isWindows = process.platform === 'win32';
+    const nextState = isWindows ? !win.isKiosk() : !win.isFullScreen();
+
+    if (isWindows) {
+        win.setKiosk(nextState);
+    }
+
+    win.setFullScreen(nextState);
+    win.focus();
+}
+
 function createWindow() {
+    const { width, height } = getInitialWindowBounds();
     const win = new BrowserWindow({
-        width: 1920,
-        height: 1080,
+        width,
+        height,
+        minWidth: 1200,
+        minHeight: 760,
+        center: true,
         frame: false,
         autoHideMenuBar: true,
+        fullscreenable: true,
+        backgroundColor: '#f0f2f5',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -34,6 +60,8 @@ function createWindow() {
         if (win.isMaximized()) win.unmaximize();
         else win.maximize();
     });
+
+    ipcMain.on('window-toggle-fullscreen', () => toggleImmersiveFullscreen(win));
 
     ipcMain.on('window-close', () => win.close());
 

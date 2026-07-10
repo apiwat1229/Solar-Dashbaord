@@ -12,6 +12,7 @@
   --consumption-color: #22c55e; /* Green */
   --success-color: #22c55e;
   --app-radius: 8px;
+  --right-rail-width: clamp(460px, 24vw, 560px);
 }
 
 .dark-theme {
@@ -429,7 +430,7 @@ main.full-width {
 
 .dashboard-top-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  grid-template-columns: minmax(0, 1fr) minmax(420px, var(--right-rail-width));
   gap: 12px;
   flex: 0 0 60%;
   min-height: 0;
@@ -467,6 +468,8 @@ main.full-width {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .power-flow-visual .title-group {
@@ -474,7 +477,7 @@ main.full-width {
 }
 
 .powerflow-updated {
-  font-size: 0.58rem;
+  font-size: 0.62rem;
   font-weight: 700;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -707,16 +710,16 @@ main.full-width {
   position: relative;
   overflow: hidden;
   min-height: 0;
-  padding: 14px;
-  gap: 6px;
+  padding: 16px;
+  gap: 8px;
 }
 
 .flow-container {
   position: relative;
   width: 100%;
   flex: 0 0 auto;
-  min-height: 138px;
-  max-height: 150px;
+  min-height: 146px;
+  max-height: 162px;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -729,7 +732,7 @@ main.full-width {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 0;
 }
 
@@ -738,7 +741,7 @@ main.full-width {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: var(--app-radius);
   background: linear-gradient(
     180deg,
@@ -751,19 +754,19 @@ main.full-width {
 .flow-data-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
 .flow-data-icon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
   color: var(--text-secondary);
 }
 
 .flow-data-label {
-  font-size: 0.6rem;
+  font-size: 0.66rem;
   font-weight: 800;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -774,7 +777,7 @@ main.full-width {
 }
 
 .flow-data-value {
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 800;
   line-height: 1.1;
   white-space: nowrap;
@@ -988,7 +991,7 @@ main.full-width {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   width: 100%;
-  gap: 6px;
+  gap: 8px;
   align-items: stretch;
   padding: 0;
   border-top: none;
@@ -1001,8 +1004,8 @@ main.full-width {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  padding: 8px;
+  gap: 5px;
+  padding: 10px;
   border-radius: var(--app-radius);
   background: linear-gradient(
     180deg,
@@ -1020,15 +1023,15 @@ main.full-width {
 
 .stat-head {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 6px;
   width: 100%;
   min-width: 0;
 }
 
 .stat-icon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1037,8 +1040,8 @@ main.full-width {
 }
 
 .stat-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   stroke-width: 3; /* Bold icons */
 }
 
@@ -1066,19 +1069,19 @@ main.full-width {
 }
 
 .footer-stat .label {
-  font-size: 0.56rem;
+  font-size: 0.62rem;
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.35px;
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .footer-stat .value {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 800;
   color: var(--text-primary);
   line-height: 1.1;
@@ -1089,34 +1092,30 @@ main.full-width {
 
 .trend-insights-section {
   margin-top: 2px;
-  padding-top: 8px;
+  padding-top: 10px;
   border-top: 1px solid rgba(226, 232, 240, 0.9);
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-gutter: stable;
-  padding-right: 4px;
+  overflow: hidden;
 }
 
 .trend-insights-header {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  margin-bottom: 8px;
+  gap: 3px;
+  margin-bottom: 10px;
 }
 
 .trend-title-main {
-  font-size: 0.76rem;
+  font-size: 0.84rem;
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: 0.02em;
 }
 
 .trend-title-sub {
-  font-size: 0.58rem;
+  font-size: 0.63rem;
   color: var(--text-secondary);
   text-align: left;
 }
@@ -1124,13 +1123,23 @@ main.full-width {
 .trend-insights-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 8px;
+}
+
+@media (min-width: 1600px) {
+  .trend-insights-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trend-insights-grid .trend-card:first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 .trend-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 3px 8px;
+  gap: 4px 10px;
   border: 1px solid rgba(226, 232, 240, 0.95);
   border-radius: var(--app-radius);
   background: linear-gradient(
@@ -1138,7 +1147,7 @@ main.full-width {
     rgba(248, 250, 252, 0.95),
     rgba(255, 255, 255, 0.98)
   );
-  padding: 8px;
+  padding: 10px;
   box-shadow: 0 3px 8px rgba(15, 23, 42, 0.035);
 }
 
@@ -1164,7 +1173,7 @@ main.full-width {
 }
 
 .trend-card-title {
-  font-size: 0.58rem;
+  font-size: 0.63rem;
   font-weight: 800;
   color: var(--text-secondary);
   letter-spacing: 0.05em;
@@ -1175,10 +1184,10 @@ main.full-width {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 52px;
-  padding: 2px 7px;
+  min-width: 58px;
+  padding: 3px 8px;
   border-radius: var(--app-radius);
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   font-weight: 800;
 }
 
@@ -1198,7 +1207,7 @@ main.full-width {
 }
 
 .trend-card-value {
-  font-size: 0.9rem;
+  font-size: 1.02rem;
   font-weight: 800;
   color: var(--text-primary);
   line-height: 1.1;
@@ -1206,7 +1215,7 @@ main.full-width {
 
 .trend-card-summary {
   margin-top: 1px;
-  font-size: 0.6rem;
+  font-size: 0.66rem;
   font-weight: 700;
   color: var(--text-secondary);
   grid-column: 1 / 2;
@@ -1214,26 +1223,26 @@ main.full-width {
 
 .trend-card-meta {
   margin-top: 2px;
-  font-size: 0.54rem;
+  font-size: 0.58rem;
   color: var(--text-primary);
   grid-column: 1 / -1;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .trend-card-delta {
   margin-top: 1px;
-  font-size: 0.58rem;
+  font-size: 0.63rem;
   font-weight: 700;
   color: var(--text-secondary);
   grid-column: 1 / -1;
 }
 
 .trend-card.trend-up .trend-card-delta {
-  color: #15803d;
+  color: #dc2626;
 }
 
 .trend-card.trend-down .trend-card-delta {
-  color: #dc2626;
+  color: #15803d;
 }
 
 .trend-card.trend-flat .trend-card-delta {
@@ -1242,9 +1251,104 @@ main.full-width {
 
 .trend-card-compare {
   margin-top: 1px;
-  font-size: 0.58rem;
+  font-size: 0.63rem;
   color: #94a3b8;
   grid-column: 1 / -1;
+}
+
+.trend-card-compare.compact {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trend-diff-inline {
+  font-weight: 800;
+}
+
+.trend-card.trend-up .trend-diff-inline {
+  color: #dc2626;
+}
+
+.trend-card.trend-down .trend-diff-inline {
+  color: #15803d;
+}
+
+.trend-card.trend-flat .trend-diff-inline {
+  color: #475569;
+}
+
+@media (min-width: 2200px) and (min-height: 1200px) {
+  :root {
+    --right-rail-width: clamp(520px, 24vw, 620px);
+  }
+
+  main.full-width {
+    padding: 8px 16px;
+  }
+
+  .dashboard-grid,
+  .dashboard-top-row,
+  .dashboard-bottom-row {
+    gap: 14px;
+  }
+
+  .chart-card {
+    padding: 22px;
+  }
+
+  .power-flow-visual {
+    padding: 18px;
+  }
+
+  .powerflow-updated {
+    font-size: 0.66rem;
+  }
+
+  .flow-container {
+    min-height: 132px;
+    max-height: 150px;
+  }
+
+  .flow-data-row {
+    padding: 11px 13px;
+  }
+
+  .flow-data-label {
+    font-size: 0.7rem;
+  }
+
+  .flow-data-value {
+    font-size: 1.08rem;
+  }
+
+  .footer-stat {
+    padding: 11px;
+  }
+
+  .footer-stat .label {
+    font-size: 0.66rem;
+  }
+
+  .footer-stat .value {
+    font-size: 0.86rem;
+  }
+
+  .trend-insights-header {
+    margin-bottom: 8px;
+  }
+
+  .trend-title-main {
+    font-size: 0.86rem;
+  }
+
+  .trend-title-sub {
+    font-size: 0.62rem;
+  }
+
+  .trend-card {
+    padding: 9px;
+  }
 }
 
 .stat-divider {
